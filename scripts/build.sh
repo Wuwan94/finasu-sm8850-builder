@@ -392,6 +392,14 @@ export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-folksu}"
 export KBUILD_BUILD_HOST="${KBUILD_BUILD_HOST:-builder}"
 
 KCFLAGS=" -no-canonical-prefixes -O2 -pipe -Wno-error -fno-stack-protector -D__ANDROID_COMMON_KERNEL__"
+# FolkSU 的源码头用的是 #include "uapi/app_profile.h"，依赖 Kbuild 里的
+# ccflags-y += -I$(KSU_KERNEL_DIR)/include 生效；在 symlink 挂载 + O= 组合下这条
+# 有时不作用于子目录对象（CI 上实测 core/init.o 找不到）。这里用 KCFLAGS 兜底，
+# 让头文件路径对整棵树都可见。
+if [ -d "$WORKDIR/KernelSU/kernel/include" ]; then
+    KCFLAGS+=" -I$WORKDIR/KernelSU/kernel -I$WORKDIR/KernelSU/kernel/include"
+    info "KSU 头文件路径：-I$WORKDIR/KernelSU/kernel/include"
+fi
 KCFLAGS+=" -fdebug-prefix-map=$WORKDIR=. -fmacro-prefix-map=$WORKDIR=. -ffile-prefix-map=$WORKDIR=."
 export KCFLAGS
 
