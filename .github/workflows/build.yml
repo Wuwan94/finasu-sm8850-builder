@@ -33,6 +33,11 @@ on:
         required: false
         type: string
         default: ''
+      builtin_ksu:
+        description: '把 FolkSU 编译进内核（关闭则给 init_boot 里 kernelsu.ko 的 LKM 模式用；刷过 LKM root 的机器请选 false）'
+        required: true
+        type: boolean
+        default: true
       kpm:
         description: '叠加 KPatch-Next 的独立 KPM 实现'
         required: true
@@ -124,6 +129,7 @@ jobs:
           FOLKSU_MANAGER_VERSION: ${{ inputs.folksu_version }}
           MANAGER_APK: ${{ inputs.manager_apk_url != '' && 'manager.apk' || '' }}
           CUSTOM_SUFFIX: ${{ inputs.kernel_suffix }}
+          APPLY_KSU: ${{ inputs.builtin_ksu && '1' || '0' }}
           USE_KPM: ${{ inputs.kpm && '1' || '0' }}
           APPLY_LZ4: ${{ inputs.lz4 && '1' || '0' }}
           APPLY_LZ4KD: ${{ inputs.lz4kd && '1' || '0' }}

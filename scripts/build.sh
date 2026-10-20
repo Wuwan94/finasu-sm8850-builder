@@ -48,6 +48,7 @@ case "$KERNEL_VERSION" in
 esac
 CUSTOM_SUFFIX="${CUSTOM_SUFFIX:-$DEFAULT_SUFFIX}"
 
+APPLY_KSU="${APPLY_KSU:-1}"   # 0 = 不内置 KSU（给 init_boot 里 kernelsu.ko 的 LKM 模式用）
 USE_KPM="${USE_KPM:-0}"                       # KPatch-Next 独立 KPM（直接改 Image）
 APPLY_LZ4="${APPLY_LZ4:-1}"                   # lz4 1.10.0 + zstd 1.5.7
 APPLY_LZ4KD="${APPLY_LZ4KD:-0}"
@@ -213,8 +214,13 @@ sed -i "s/^CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=\"-${CUSTOM_SUFFIX}\"/" "$
 echo "CONFIG_LOCALVERSION_AUTO=n" >> "$DEFCONFIG"
 
 # ------------------------------------------------------------------ FolkSU
-log "集成 FolkSU(FinaSU) 内核侧代码"
-folksu_integrate "$WORKDIR" "$WORKDIR/common"
+if [ "$APPLY_KSU" = "1" ]; then
+    log "集成 FolkSU(FinaSU) 内核侧代码"
+    folksu_integrate "$WORKDIR" "$WORKDIR/common"
+else
+    log "跳过 FolkSU 内核侧代码（APPLY_KSU=0，LKM 模式）"
+    info "内核不带 CONFIG_KSU，root 由 init_boot 里的 kernelsu.ko 在开机时加载"
+fi
 
 # ------------------------------------------------------------------ 补丁
 apply_patch() { # apply_patch <patch> <strip> [soft]
@@ -269,9 +275,6 @@ fi
 # ------------------------------------------------------------------ defconfig
 log "写入 defconfig"
 cat >> "$DEFCONFIG" <<'EOF'
-CONFIG_KSU=y
-CONFIG_KSU_DYNAMIC_MANAGER=y
-CONFIG_KSU_SUSFS=n
 CONFIG_TMPFS_XATTR=y
 CONFIG_TMPFS_POSIX_ACL=y
 CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
@@ -286,6 +289,19 @@ CONFIG_ANDROID_BINDER_IPC_RUST=m
 CONFIG_DEBUG_INFO_COMPRESSED_NONE=y
 # CONFIG_DEBUG_INFO_COMPRESSED_ZSTD is not set
 EOF
+if [ "$APPLY_KSU" = "1" ]; then
+cat >> "$DEFCONFIG" <<'EOF'
+CONFIG_KSU=y
+CONFIG_KSU_DYNAMIC_MANAGER=y
+CONFIG_KSU_SUSFS=n
+EOF
+else
+# 不内置 KSU：显式关掉，避免和 init_boot 里的 kernelsu.ko 抢
+cat >> "$DEFCONFIG" <<'EOF'
+# CONFIG_KSU is not set
+# CONFIG_KSU_SUSFS is not set
+EOF
+fi
 
 if [ "$APPLY_LZ4KD" = "1" ]; then
     cat >> "$DEFCONFIG" <<'EOF'
@@ -418,9 +434,16 @@ IMG="$WORKDIR/common/out/arch/arm64/boot/Image"
 [ -f "$IMG" ] || die "编译结束但没有产出 Image"
 
 # ------------------------------------------------------------------ 校验
-log "编译产物校验"
-if ! folksu_verify "$BUILD_LOG" "$IMG"; then
-    die "校验未通过：这个包刷上去管理器也认不了，先别刷（详见上方提示）"
+if [ "$APPLY_KSU" = "1" ]; then
+    log "编译产物校验"
+    if ! folksu_verify "$BUILD_LOG" "$IMG"; then
+        die "校验未通过：这个包刷上去管理器也认不了，先别刷（详见上方提示）"
+    fi
+else
+    if grep -qa -- '-- KernelSU version:' "$BUILD_LOG"; then
+        die "APPLY_KSU=0 但日志里出现了 KernelSU 版本行：内置 KSU 没关干净"
+    fi
+    log "校验：确认内核未内置 KSU（LKM 模式）"
 fi
 
 # ------------------------------------------------------------------ KPM
