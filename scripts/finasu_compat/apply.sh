@@ -25,6 +25,18 @@ cp "$UPSTREAM_PATCH" "$KERNEL_ROOT/$KSU_DIR/10_enable_susfs_for_ksu.patch"
 rm -f "$KERNEL_ROOT/$KSU_DIR/10_enable_susfs_for_ksu.patch"
 
 echo "步骤 2/2: FinaSU 内联适配修复..."
+
+# 补丁会让 sucompat.c 调用 util.h 里的 static inline userspace_stack_buffer，
+# 但 FinaSU 的 sucompat.c 本来没 include util.h（它只在别处用），会编译报
+#   error: call to undeclared function 'userspace_stack_buffer'
+SU_COMPAT="$KERNEL_ROOT/${KSU_DIR:-KernelSU}/kernel/feature/sucompat.c"
+if [ -f "$SU_COMPAT" ] && grep -q "userspace_stack_buffer" "$SU_COMPAT"; then
+  if ! grep -q '#include "util.h"' "$SU_COMPAT"; then
+    sed -i '1i #include "util.h"' "$SU_COMPAT"
+    echo "  · sucompat.c: 补 #include \"util.h\"（userspace_stack_buffer 的定义）"
+  fi
+fi
+
 if [ "$KSU_VARIANT" == "FinaSU" ]; then
   FINASU_KSU="$KERNEL_ROOT/KernelSU/kernel"
   FINASU_INIT="$FINASU_KSU/core/init.c"
