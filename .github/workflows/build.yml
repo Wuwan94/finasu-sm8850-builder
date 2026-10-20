@@ -151,9 +151,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: AnyKernel3-FinaSU-${{ inputs.kernel_version }}
-          path: |
-            dist/*.zip
-            dist/*.sha256
+          # archive: false 只允许上传单个文件，所以这里只传 zip；
+          # sha256 在 Release 资产里（同名的 .zip.sha256）
+          path: dist/*.zip
           archive: false
           if-no-files-found: error
 
