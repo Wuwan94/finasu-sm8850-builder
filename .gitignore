@@ -1,0 +1,7 @@
+work/
+dist/
+.pylib/
+*.apk
+*.zip
+*.log
+*.sha256

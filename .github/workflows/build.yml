@@ -1,0 +1,162 @@
+name: Build SM8850 Kernel (FolkSU / FinaSU)
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: '内核基线（决定刷哪些机型，选错会开不了机）'
+        required: true
+        type: choice
+        default: '6.12.23'
+        options:
+          - '6.12.23'   # 一加 15 源码基线，OKI
+          - '6.12.38'   # 一加 Ace 6T 源码基线
+          - '6.12.58'   # Pad 3 Pro 源码基线
+          - '6.12.69-gki'
+      folksu_tag:
+        description: 'FolkSU/FinaSU 源码 tag（要与管理器版本配套）'
+        required: true
+        type: string
+        default: 'v1.0.4'
+      folksu_version:
+        description: '管理器 versionCode（必须等于 30000 + 该 tag 的提交数）'
+        required: true
+        type: string
+        default: '32960'
+      manager_apk_url:
+        description: '可选：管理器 APK 直链，填了就从 APK 实测签名并核对版本号'
+        required: false
+        type: string
+        default: ''
+      kernel_suffix:
+        description: '内核后缀（留空用该基线默认值，开头不加连字符）'
+        required: false
+        type: string
+        default: ''
+      kpm:
+        description: '叠加 KPatch-Next 的独立 KPM 实现'
+        required: true
+        type: boolean
+        default: false
+      lz4:
+        description: 'lz4 1.10.0 + zstd 1.5.7 补丁'
+        required: true
+        type: boolean
+        default: true
+      lz4kd:
+        description: 'LZ4KD 补丁（与 lz4/zstd 二选一即可）'
+        required: true
+        type: boolean
+        default: false
+      bbr:
+        description: 'BBR 等拥塞控制算法'
+        required: true
+        type: choice
+        default: '0'
+        options:
+          - '0'
+          - '1'
+          - 'default'
+      droidspaces:
+        description: 'Droidspaces 容器支持'
+        required: true
+        type: choice
+        default: '0'
+        options:
+          - '0'
+          - 'standard'
+          - 'extend'
+      better_net:
+        description: 'netfilter/ipset 增强配置'
+        required: true
+        type: boolean
+        default: false
+      adios:
+        description: 'ADIOS IO 调度器'
+        required: true
+        type: boolean
+        default: true
+      rekernel:
+        description: 'Re:Kernel 支持'
+        required: true
+        type: boolean
+        default: false
+      baseband_guard:
+        description: 'Baseband-guard 内核级防格机'
+        required: true
+        type: boolean
+        default: true
+      release:
+        description: '构建完成后发布到 Release'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 腾出磁盘空间
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc /usr/local/share/boost "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+
+      - name: 下载管理器 APK（可选）
+        if: inputs.manager_apk_url != ''
+        run: |
+          curl -fL --retry 3 -o manager.apk "${{ inputs.manager_apk_url }}"
+          python3 scripts/apk_cert.py manager.apk
+
+      - name: 构建
+        env:
+          KERNEL_VERSION: ${{ inputs.kernel_version }}
+          FOLKSU_TAG: ${{ inputs.folksu_tag }}
+          FOLKSU_MANAGER_VERSION: ${{ inputs.folksu_version }}
+          MANAGER_APK: ${{ inputs.manager_apk_url != '' && 'manager.apk' || '' }}
+          CUSTOM_SUFFIX: ${{ inputs.kernel_suffix }}
+          USE_KPM: ${{ inputs.kpm && '1' || '0' }}
+          APPLY_LZ4: ${{ inputs.lz4 && '1' || '0' }}
+          APPLY_LZ4KD: ${{ inputs.lz4kd && '1' || '0' }}
+          APPLY_BBR: ${{ inputs.bbr }}
+          APPLY_DROIDSPACES: ${{ inputs.droidspaces }}
+          APPLY_BETTERNET: ${{ inputs.better_net && '1' || '0' }}
+          APPLY_ADIOS: ${{ inputs.adios && '1' || '0' }}
+          APPLY_REKERNEL: ${{ inputs.rekernel && '1' || '0' }}
+          APPLY_BBG: ${{ inputs.baseband_guard && '1' || '0' }}
+          INSTALL_DEPS: '1'
+        run: |
+          bash scripts/build.sh 2>&1 | tee build-full.log
+
+      - name: 上传刷机包
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnyKernel3-FolkSU-${{ inputs.kernel_version }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+
+      - name: 上传编译日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.run_number }}
+          path: build-full.log
+          if-no-files-found: ignore
+
+      - name: 发布 Release
+        if: inputs.release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="folksu-${KERNEL_VERSION:-${{ inputs.kernel_version }}}-$(date +%Y%m%d-%H%M)"
+          gh release create "$TAG" dist/*.zip dist/*.sha256 \
+            --title "FolkSU ${{ inputs.folksu_tag }} / kernel ${{ inputs.kernel_version }}" \
+            --notes "管理器版本号必须是 ${{ inputs.folksu_version }}（UAPI 见 config/folksu.conf）。刷入前请确认机型与内核基线匹配。"
