@@ -133,6 +133,8 @@ jobs:
           APPLY_BBG: ${{ inputs.baseband_guard && '1' || '0' }}
           INSTALL_DEPS: '1'
         run: |
+          # 没有 pipefail 的话 tee 会把 build.sh 的失败吞掉（第一次就踩了）
+          set -o pipefail
           bash scripts/build.sh 2>&1 | tee build-full.log
 
       - name: 上传刷机包
@@ -142,6 +144,7 @@ jobs:
           path: |
             dist/*.zip
             dist/*.sha256
+          if-no-files-found: error
 
       - name: 上传编译日志
         if: always()

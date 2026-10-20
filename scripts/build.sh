@@ -145,10 +145,18 @@ if [ ! -d "$WORKDIR/common" ]; then
     log "拉取内核源码 + 工具链（并行）"
     (
         fetch "$KERNEL_ZIP" "$WORKDIR/common.zip"
-        rm -rf "$WORKDIR/.kx"; mkdir -p "$WORKDIR/.kx" "$WORKDIR/common"
+        rm -rf "$WORKDIR/.kx" "$WORKDIR/common"
+        mkdir -p "$WORKDIR/.kx"
         unzip -q "$WORKDIR/common.zip" -d "$WORKDIR/.kx"
-        shopt -s dotglob
-        mv "$WORKDIR/.kx"/* "$WORKDIR/common"/
+        # GitHub 归档都是「单层目录 + 源码」，直接把它改名成 common；
+        # 千万不要先建 common 再 mv 进去 —— 那样会套成 common/<顶层目录>/arch
+        top="$(ls -A "$WORKDIR/.kx" | head -1)"
+        if [ -d "$WORKDIR/.kx/$top" ] && [ "$(ls -A "$WORKDIR/.kx" | wc -l)" -eq 1 ]; then
+            mv "$WORKDIR/.kx/$top" "$WORKDIR/common"
+        else
+            mkdir -p "$WORKDIR/common"
+            mv "$WORKDIR/.kx"/* "$WORKDIR/common"/
+        fi
         rm -rf "$WORKDIR/.kx" "$WORKDIR/common.zip"
     ) & P1=$!
     (
@@ -173,6 +181,11 @@ else
     info "复用已存在的内核源码：$WORKDIR/common"
 fi
 [ -d "$WORKDIR/common" ] || die "内核源码解压失败"
+[ -f "$WORKDIR/common/arch/arm64/configs/gki_defconfig" ] || {
+    echo "common/ 顶层内容："
+    ls -A "$WORKDIR/common" | head -20
+    die "内核源码结构异常：找不到 arch/arm64/configs/gki_defconfig"
+}
 [ -x "$WORKDIR/clang19/bin/clang" ] || die "clang 工具链不完整：$WORKDIR/clang19/bin/clang"
 
 # ------------------------------------------------------------------ 版本后缀
