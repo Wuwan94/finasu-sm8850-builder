@@ -125,7 +125,7 @@ if [ "$INSTALL_DEPS" = "1" ]; then
     if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
     $SUDO apt-get update -qq
     $SUDO apt-get install -y --no-install-recommends \
-        bc bison flex libssl-dev libelf-dev cpio zip unzip rsync \
+        bc bison flex libssl-dev libelf-dev libdw-dev dwarves cpio zip unzip rsync \
         gcc binutils make python3 perl xz-utils tar ca-certificates
 fi
 for c in make gcc bc flex bison patch; do need "$c"; done
