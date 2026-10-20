@@ -268,6 +268,13 @@ CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
 CONFIG_HEADERS_INSTALL=n
 CONFIG_RUST=y
 CONFIG_ANDROID_BINDER_IPC_RUST=m
+# 关键：设备 defconfig 默认开 CONFIG_DEBUG_INFO_COMPRESSED_ZSTD，
+# 它会让 rustc 加 -Zdebuginfo-compression=zstd，产出的 rust/core.o 里 DWARF 是压缩的，
+# 6.12 的 gendwarfksyms（读 DWARF 算符号 CRC）直接报
+#   "gendwarfksyms: process_module: dwarf_get_units failed: no debugging information?"
+# 关掉压缩调试信息即可（C 对象也会从 -gz=zstd 回到普通 DWARF5）
+CONFIG_DEBUG_INFO_COMPRESSED_NONE=y
+# CONFIG_DEBUG_INFO_COMPRESSED_ZSTD is not set
 EOF
 
 if [ "$APPLY_LZ4KD" = "1" ]; then
