@@ -33,6 +33,11 @@ on:
         required: false
         type: string
         default: ''
+      susfs_enable:
+        description: '是否开启 SUSFS（内核级隐藏；需要内置 FinaSU，会调用 scripts/finasu_compat 的源码级适配）'
+        required: true
+        type: boolean
+        default: false
       builtin_ksu:
         description: '把 FinaSU 编译进内核（关闭则给 init_boot 里 kernelsu.ko 的 LKM 模式用；刷过 LKM root 的机器请选 false）'
         required: true
@@ -99,7 +104,7 @@ on:
 
 concurrency:
   # 同一套参数重复触发时自动取消旧 run（分组带上各开关，A/B 两种变体互不影响）
-  group: build-${{ inputs.kernel_version }}-${{ inputs.builtin_ksu }}-${{ inputs.adios }}-${{ inputs.baseband_guard }}-${{ inputs.lz4 }}
+  group: build-${{ inputs.kernel_version }}-${{ inputs.builtin_ksu }}-${{ inputs.susfs_enable }}-${{ inputs.adios }}-${{ inputs.baseband_guard }}-${{ inputs.lz4 }}
   cancel-in-progress: true
 
 permissions:
@@ -143,6 +148,7 @@ jobs:
           MANAGER_APK: ${{ inputs.manager_apk_url != '' && 'manager.apk' || '' }}
           CUSTOM_SUFFIX: ${{ inputs.kernel_suffix }}
           APPLY_KSU: ${{ inputs.builtin_ksu && '1' || '0' }}
+          APPLY_SUSFS: ${{ inputs.susfs_enable && '1' || '0' }}
           USE_KPM: ${{ inputs.kpm && '1' || '0' }}
           APPLY_LZ4: ${{ inputs.lz4 && '1' || '0' }}
           APPLY_LZ4KD: ${{ inputs.lz4kd && '1' || '0' }}
