@@ -39,6 +39,11 @@ case "$KERNEL_VERSION" in
     6.12.23)
         KERNEL_ZIP="https://github.com/cctv18/android_kernel_common_oneplus_sm8850/archive/refs/heads/oneplus/sm8850_v_16.0.0_oneplus_15.zip"
         DEFAULT_SUFFIX="android16-5-ga8f88ad96df3-ab13929693-4k" ;;
+    6.12.23-gki)
+        # AOSP GKI common 6.12.23（2025-06 快照）——通用 GKI 内核，
+        # 跨品牌机型（真我/OPPO/一加）用这棵树的符号 CRC 才对得上
+        KERNEL_ZIP="https://github.com/cctv18/android_gki_kernel_common/archive/refs/heads/android16-6.12-2025-06.zip"
+        DEFAULT_SUFFIX="android16-5-ga8f88ad96df3-ab13929693-4k" ;;
     6.12.38)
         KERNEL_ZIP="https://github.com/cctv18/android_kernel_common_oneplus_sm8845/archive/refs/heads/oneplus/sm8845_b_16.0.0_ace_6t.zip"
         DEFAULT_SUFFIX="android16-5-g8c67d4274c0a-ab14275539-4k" ;;
