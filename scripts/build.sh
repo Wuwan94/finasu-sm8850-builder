@@ -250,7 +250,8 @@ fi
 
 if [ "$APPLY_BBG" = "1" ]; then
     log "集成 Baseband-guard（防格机 LSM）"
-    curl -fsSL https://github.com/vc-teahouse/Baseband-guard/raw/master/setup.sh | bash \
+    # 注意：github.com/<repo>/raw/master/... 会 404（默认分支是 main），必须用 raw.githubusercontent
+    curl -fsSL https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh | bash \
         || die "Baseband-guard setup.sh 执行失败"
     sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
 fi
