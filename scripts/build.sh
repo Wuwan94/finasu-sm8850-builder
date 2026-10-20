@@ -465,6 +465,50 @@ ZIP_NAME="${ZIP_NAME}_$(date +%Y%m%d).zip"
 } > ak3.txt
 zip -qr "$DIST_DIR/$ZIP_NAME" ./*
 
+# 按 FinaSU/FolkSU 管理器内置 ksud 的规则自检包结构
+# （userspace/ksud/src/anykernel3.rs：root 必须有 anykernel.sh、必须有 tools/、
+#   不能有 module.prop、不能有重复/越界条目）。结构不对时管理器会直接报
+#   "ZIP is missing root anykernel.sh"，所以这里先卡住。
+log "校验 AK3 结构（管理器 ksud 规则）"
+python3 - "$DIST_DIR/$ZIP_NAME" <<'PY' || die "AK3 结构校验未通过：管理器会拒绝这个包"
+import struct, sys, zipfile
+
+path = sys.argv[1]
+data = open(path, "rb").read()
+eocd = data.rfind(b"PK\x05\x06")
+cd_size, cd_off = struct.unpack_from("<II", data, eocd + 12)
+raw, names, pos = data[cd_off:cd_off + cd_size], [], 0
+while raw[pos:pos + 4] == b"PK\x01\x02":
+    hdr = raw[pos + 4:pos + 46]
+    nlen, elen, clen = struct.unpack_from("<HHH", hdr, 24)
+    names.append(raw[pos + 46:pos + 46 + nlen].decode("utf-8", "replace"))
+    pos += 46 + nlen + elen + clen
+
+z = zipfile.ZipFile(path)
+problems = []
+if len(names) != len(z.namelist()):
+    problems.append("中央目录条目数与索引不一致")
+if len(names) != len(set(names)):
+    problems.append("存在重复条目")
+if any(n.startswith("/") or ".." in n.split("/") for n in names):
+    problems.append("存在越界条目")
+if "anykernel.sh" not in names:
+    problems.append("根目录缺少 anykernel.sh")
+if not any(n.startswith("tools/") for n in names):
+    problems.append("缺少 tools/")
+if any(n == "module.prop" or n.endswith("/module.prop") for n in names):
+    problems.append("含 module.prop（像模块包而不是 AK3）")
+if z.testzip() is not None:
+    problems.append("压缩包内容损坏")
+
+print(f"  条目 {len(names)} 个，Image {z.getinfo('Image').file_size if 'Image' in names else 0} 字节")
+if problems:
+    for p in problems:
+        print("  [x] " + p)
+    sys.exit(1)
+print("  [√] 结构符合管理器要求")
+PY
+
 cd "$DIST_DIR"
 sha256sum "$ZIP_NAME" > "$ZIP_NAME.sha256"
 
