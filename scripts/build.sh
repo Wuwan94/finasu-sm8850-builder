@@ -40,10 +40,12 @@ case "$KERNEL_VERSION" in
         KERNEL_ZIP="https://github.com/cctv18/android_kernel_common_oneplus_sm8850/archive/refs/heads/oneplus/sm8850_v_16.0.0_oneplus_15.zip"
         DEFAULT_SUFFIX="android16-5-ga8f88ad96df3-ab13929693-4k" ;;
     6.12.23-gki)
-        # AOSP GKI common 6.12.23（2025-06 快照）——通用 GKI 内核，
-        # 跨品牌机型（真我/OPPO/一加）用这棵树的符号 CRC 才对得上
-        KERNEL_ZIP="https://github.com/cctv18/android_gki_kernel_common/archive/refs/heads/android16-6.12-2025-06.zip"
-        DEFAULT_SUFFIX="android16-5-ga8f88ad96df3-ab13929693-4k" ;;
+        # AOSP GKI common 6.12.23，**精确钉在真我 GT8 Pro 原厂内核所用的那个 commit**：
+        #   原厂版本串 6.12.23-android16-5-gb2a876903b49-ab14541642-4k
+        #   → g + b2a876903b49 就是源码提交；该提交正好更新了 oplus 的 KMI 符号表
+        #     (gki/aarch64/symbols/oplus)，因此符号 CRC 与 system_dlkm 一致
+        KERNEL_ZIP="https://github.com/cctv18/android_gki_kernel_common/archive/b2a876903b49.zip"
+        DEFAULT_SUFFIX="android16-5-gb2a876903b49-ab14541642-4k" ;;
     6.12.38)
         KERNEL_ZIP="https://github.com/cctv18/android_kernel_common_oneplus_sm8845/archive/refs/heads/oneplus/sm8845_b_16.0.0_ace_6t.zip"
         DEFAULT_SUFFIX="android16-5-g8c67d4274c0a-ab14275539-4k" ;;
