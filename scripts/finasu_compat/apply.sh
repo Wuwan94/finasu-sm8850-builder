@@ -301,6 +301,18 @@ PYEOF
     sed -i '/^[[:space:]]*ksu_app_profile_init();$/d' "$FINASU_INIT"
   fi
 
+  # 2b) susfs 的 init/zygote 钩子用到两个 static key，补丁的定义 hunk 因漂移没落上：
+  #     ksud_integration.c 会引用 is_init_second_stage_not_executed / is_first_zygote，
+  #     缺定义时编译报 "use of undeclared identifier"
+  if ! grep -q 'is_init_second_stage_not_executed' "$FINASU_KSU_H"; then
+    sed -i 's|^extern bool ksu_no_custom_rc;$|extern bool ksu_no_custom_rc;\n\n#include <linux/jump_label.h>\nextern struct static_key_false is_init_second_stage_not_executed;\nextern struct static_key_false is_first_zygote;|' "$FINASU_KSU_H"
+    echo "  · ksu.h: 补 is_init_second_stage_not_executed / is_first_zygote 的 extern 声明"
+  fi
+  if ! grep -q 'DEFINE_STATIC_KEY_FALSE(is_init_second_stage_not_executed)' "$FINASU_INIT"; then
+    sed -i 's|^struct cred \*ksu_cred;$|struct cred *ksu_cred;\n\nDEFINE_STATIC_KEY_FALSE(is_init_second_stage_not_executed);\nDEFINE_STATIC_KEY_FALSE(is_first_zygote);|' "$FINASU_INIT"
+    echo "  · init.c: 补两个 static key 的定义"
+  fi
+
   # 2) 恢复 ksu_late_loaded / ksu_bundled（补丁从 ksu.h 与 init.c 删除，
   #    但 FinaSU 的 dispatch / selinux_hide / ksud_integration 仍在使用）
   if ! grep -q 'extern bool ksu_late_loaded;' "$FINASU_KSU_H"; then
