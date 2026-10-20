@@ -48,20 +48,19 @@ folksu_integrate() {
         || folksu_die "版本不一致：内核 $ksu_version vs 管理器 $FOLKSU_MANAGER_VERSION。请改 FOLKSU_TAG / FOLKSU_MANAGER_VERSION"
 
     # --- 4. uapi 布局：kernel/include/uapi -> ../../uapi（上游已带软链，缺失时补）
-    if [ -e "$ksu/kernel/include/uapi" ] && [ ! -d "$ksu/kernel/include/uapi" ]; then
-        # Windows / core.symlinks=false 时软链会被检出成普通文件，删掉重建
-        folksu_warn "kernel/include/uapi 是普通文件（软链未生效），重建软链"
-        rm -f "$ksu/kernel/include/uapi" 2>/dev/null || true
-    fi
-    if [ ! -d "$ksu/kernel/include/uapi" ]; then
-        folksu_warn "kernel/include/uapi 软链缺失，补建"
-        ln -sfn ../../uapi "$ksu/kernel/include/uapi" 2>/dev/null \
-            || folksu_die "无法创建 kernel/include/uapi 软链：请在 Linux/CI 上构建（Windows 需 WSL，且 git config core.symlinks=true）"
-    fi
-    [ -f "$ksu/kernel/include/uapi/supercall.h" ] || folksu_die "FolkSU uapi 布局异常（$ksu/kernel/include/uapi）"
+    # uapi 头文件：直接把仓库顶层 uapi/ 物化进 kernel/include/uapi。
+    # 不用软链 —— 上游那个软链在经过 symlink 挂载/权限/检出设置异常时会让
+    # #include <uapi/app_profile.h> 找不到文件（CI 上真踩过一次）。
+    rm -rf "$ksu/kernel/include/uapi"
+    mkdir -p "$ksu/kernel/include/uapi"
+    cp -a "$ksu/uapi/." "$ksu/kernel/include/uapi/"
+    [ -f "$ksu/kernel/include/uapi/app_profile.h" ] \
+        || folksu_die "uapi 头文件物化失败：$ksu/kernel/include/uapi 里没有 app_profile.h"
+    folksu_log "uapi 头文件：$(ls "$ksu/kernel/include/uapi" | tr '\n' ' ')"
 
     # --- 5. 按 KernelSU 官方 setup.sh 的同款方式挂进内核树
     ln -sfn "$ksu/kernel" "$ksrc/drivers/kernelsu"
+    folksu_log "kernelsu 挂载点：$(readlink -f "$ksrc/drivers/kernelsu")"
     grep -q 'kernelsu' "$ksrc/drivers/Makefile" \
         || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> "$ksrc/drivers/Makefile"
     grep -q 'drivers/kernelsu/Kconfig' "$ksrc/drivers/Kconfig" \
