@@ -97,7 +97,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    # 6.12 的 gendwarfksyms 需要 elfutils(libdw) >= 0.188 才能解析 DWARF5 行表；
+    # ubuntu-22.04 自带 0.186，会报 `invalid .debug_line section`，所以用 24.04（0.190）
+    runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
       - name: 检出仓库

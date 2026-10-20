@@ -130,6 +130,16 @@ if [ "$INSTALL_DEPS" = "1" ]; then
 fi
 for c in make gcc bc flex bison patch; do need "$c"; done
 
+# 6.12 的 gendwarfksyms 用 libdw 解析 DWARF5；elfutils < 0.188 会报
+#   "is_definition_private: dwarf_getsrcfiles failed: 'invalid .debug_line section'"
+if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists libdw 2>/dev/null; then
+    DW_VER="$(pkg-config --modversion libdw)"
+    info "libdw: $DW_VER"
+    if [ "$(printf '%s\n%s\n' 0.188 "$DW_VER" | sort -V | head -1)" != "0.188" ]; then
+        warn "libdw $DW_VER 低于 0.188，6.12 的 gendwarfksyms 可能失败；建议用 Ubuntu 24.04 或自行编译新版 elfutils"
+    fi
+fi
+
 # ------------------------------------------------------------------ 拉取
 mkdir -p "$WORKDIR" "$DIST_DIR"
 cd "$WORKDIR"
