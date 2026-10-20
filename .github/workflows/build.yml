@@ -140,12 +140,15 @@ jobs:
           bash scripts/build.sh 2>&1 | tee build-full.log
 
       - name: 上传刷机包
-        uses: actions/upload-artifact@v4
+        # archive: false —— 关键！默认行为会把 zip 再包一层，
+        # 用户下载到的是「包含刷机包的 zip」，管理器会报 ZIP is missing root anykernel.sh
+        uses: actions/upload-artifact@v7
         with:
           name: AnyKernel3-FolkSU-${{ inputs.kernel_version }}
           path: |
             dist/*.zip
             dist/*.sha256
+          archive: false
           if-no-files-found: error
 
       - name: 上传编译日志

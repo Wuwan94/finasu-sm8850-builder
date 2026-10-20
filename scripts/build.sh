@@ -496,6 +496,11 @@ if "anykernel.sh" not in names:
     problems.append("根目录缺少 anykernel.sh")
 if not any(n.startswith("tools/") for n in names):
     problems.append("缺少 tools/")
+ub = "META-INF/com/google/android/update-binary"
+if ub not in names:
+    problems.append(f"缺少 {ub}（管理器会报 AK3 包缺少 update-binary）")
+elif b"\x00" in z.read(ub):
+    problems.append(f"{ub} 含 NUL 字节（ksud 会拒绝）")
 if any(n == "module.prop" or n.endswith("/module.prop") for n in names):
     problems.append("含 module.prop（像模块包而不是 AK3）")
 if z.testzip() is not None:
