@@ -5,3 +5,4 @@ dist/
 *.zip
 *.log
 *.sha256
+__pycache__/

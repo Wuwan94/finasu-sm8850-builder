@@ -21,6 +21,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 log()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 info() { printf '\033[1;34m  ·\033[0m %s\n' "$*"; }
@@ -30,6 +31,7 @@ IMAGE="${1:-}"
 if [ -z "$IMAGE" ] || [ ! -f "$IMAGE" ]; then
     die "用法：bash $0 <Image 路径>（内核编译产物 arch/arm64/boot/Image）"
 fi
+IMAGE="$(realpath "$IMAGE")"
 
 MANIFEST="${MANIFEST:-oppo+oplus+realme}"
 KSU_TYPENAME="${KSU_TYPENAME:-FinaSU}"
@@ -40,19 +42,35 @@ WITH_LZ4KD="${WITH_LZ4KD:-0}"
 WITH_KPM="${WITH_KPM:-0}"
 OUT_DIR="${OUT_DIR:-$SCRIPT_DIR/../dist}"
 WORK="${WORKDIR:-$SCRIPT_DIR/../.ak3work}"
-AK3_REPO="${AK3_REPO:-https://github.com/cctv18/AnyKernel3}"
 
 mkdir -p "$OUT_DIR" "$WORK"
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
+WORK="$(cd "$WORK" && pwd)"
+if [ "$KERNEL_VERSION" = "6.12.23-gki" ]; then
+    [ -n "${KERNEL_CONFIG:-}" ] && [ -n "${KERNEL_SYMVERS:-}" ] \
+        || die "RMX5200 打包需要 KERNEL_CONFIG 和 KERNEL_SYMVERS，不能只凭 Image 文件名判断兼容"
+    python3 "$SCRIPT_DIR/kernel_compat.py" verify \
+        --image "$IMAGE" --config "$KERNEL_CONFIG" --symvers "$KERNEL_SYMVERS" \
+        --reference "$REPO_ROOT/config/devices/rmx5200-16.0.9.401.json" \
+        --stable "${KBUILD_GENDWARFKSYMS_STABLE:-0}" --output "$WORK/compatibility.json" \
+        || die "内核兼容性检查失败，不生成刷机包"
+fi
 cd "$WORK"
 
 log "准备 AnyKernel3 模板"
-if [ ! -d AnyKernel3/.git ]; then
-    rm -rf AnyKernel3
-    git clone --depth=1 -q "$AK3_REPO" AnyKernel3 || die "克隆 AnyKernel3 失败"
+[ -d "$REPO_ROOT/ak3" ] || die "缺少仓库内固定的 ak3/ 模板"
+rm -rf AnyKernel3
+cp -a "$REPO_ROOT/ak3" AnyKernel3
+if [ "$KERNEL_VERSION" = "6.12.23-gki" ]; then
+    cp "$WORK/compatibility.json" AnyKernel3/compatibility.json
+    cat > AnyKernel3/device-compatibility.prop <<'EOF'
+model=RMX5200
+device=RE6030L1
+android=16
+firmware=RMX5200_16.0.9.401(CN01)
+release=6.12.23-android16-5-gb2a876903b49-ab14541642-4k
+EOF
 fi
-git -C AnyKernel3 fetch --depth=1 -q origin || true
-git -C AnyKernel3 reset --hard -q origin/HEAD 2>/dev/null || true
-rm -rf AnyKernel3/.git
 
 log "放入内核镜像"
 cp -f "$IMAGE" AnyKernel3/Image

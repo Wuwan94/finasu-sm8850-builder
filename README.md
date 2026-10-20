@@ -1,5 +1,7 @@
 # FinaSU 适配版 SM8850 内核构建器
 
+> RMX5200 `16.0.9.401(CN01)` 已报告旧产物 `finasu-6.12.23-gki-20261020-1212` 无法开机，请勿重复刷入。当前修复启用 Android KABI 稳定模式，并增加原厂模块 CRC、Image 配置与安装机型检查。构建结果和限制见 [RMX5200 开机兼容性修复](docs/RMX5200-boot-repair.md)。尚未完成修复内核的真机开机验证。
+
 给 OPPO / 一加 / 真我 SM8850（骁龙 8 Elite Gen5）机型造一个**能被 FinaSU 管理器直接接管**的 6.12 内核。
 
 > **命名说明**：这个管理器原名 FolkSU，现已改名 **FinaSU**（作者 LyraVoid，仓库 `LyraVoid/FinaSU`，旧地址 `LyraVoid/FolkSU` 会自动 301 跳转）。本仓库统一用 FinaSU 这个叫法，发布包是 `FinaSU_*.apk`。
