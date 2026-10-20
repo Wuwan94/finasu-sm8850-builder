@@ -34,6 +34,7 @@
 
 ```
 finasu-sm8850-builder/
+├── ak3/                            ← AnyKernel3 模板（仓库自维护，scripts/update-ak3.sh 同步上游）
 ├── config/finasu.conf              ← 版本 / UAPI / 签名 的唯一真相源
 ├── scripts/
 │   ├── build.sh                    ← 主构建脚本（拉源码、打补丁、编译、打包、校验）
@@ -41,10 +42,13 @@ finasu-sm8850-builder/
 │   ├── apk_cert.py                 ← 从任意管理器 APK 反推 cert size / hash / 版本号
 │   ├── pack-ak3.sh                 ← 已有 Image 直接打 AnyKernel3（不重新编译）
 │   ├── apply_finasu.py             ← 给上游 Wuwan94 仓库注入 finasu 选项（输出与 .patch 一致）
+│   ├── update-ak3.sh               ← 同步 ak3/ 模板到上游最新
+│   └── finasu_compat/              ← FinaSU × SUSFS 源码级适配（移植自 Wuwan94/AnyKernel3）
 │   ├── push-upstream.sh            ← 一键克隆上游 + 注入 + 建分支 + 推送/开 PR
 │   ├── init-repo.sh                ← 一键把本目录变成 GitHub 仓库并推送
 │   └── build-manager.sh            ← 可选：从源码构建你自己的管理器 APK
 ├── .github/workflows/build.yml     ← GitHub Actions 一键出包
+├── tests/                          ← 离线单元测试（make test）
 └── docs/适配说明.md                ← 技术细节与证据链
 ```
 
@@ -126,7 +130,39 @@ bash scripts/build.sh --check
 
 ---
 
-## 六、打包 AK3 与推送仓库
+## 六、内核基线与功能开关
+
+### 支持的基线
+
+| `kernel_version` | 源码基线 | 默认内核后缀 | 状态 |
+|---|---|---|---|
+| `6.12.23` | 一加 15（`oneplus/sm8850_v_16.0.0_oneplus_15`） | `android16-5-ga8f88ad96df3-…-4k` | ✅ 已验证出包 |
+| `6.12.38` | 一加 Ace 6T（`sm8845`） | `android16-5-g8c67d4274c0a-…-4k` | CI 冒烟中 |
+| `6.12.58` | Pad 3 Pro（`sm8850`） | `android16-5-ga8f88ad96df3-…-4k` | CI 冒烟中 |
+| `6.12.69-gki` | 通用 GKI（`android_gki_kernel_common`） | `android16-5-ge7f2a9832757-…-4k` | CI 冒烟中 |
+
+### 功能开关（Actions 参数）
+
+| 参数 | 默认 | 说明 |
+|---|---|---|
+| `builtin_ksu` | true | 把 FinaSU 编进内核。**刷过 LKM root（init_boot 里有 kernelsu.ko）的机器必须选 false**，否则卡开机 logo |
+| `susfs_enable` | false | 集成 SUSFS（内核级隐藏）。需要 `builtin_ksu=true`，会调用 `scripts/finasu_compat/` 做 FinaSU 源码级适配 |
+| `baseband_guard` | true | Baseband-guard 防格机 LSM |
+| `adios` | true | ADIOS IO 调度器 |
+| `lz4` / `lz4kd` | true / false | lz4 1.10.0 + zstd 1.5.7 / LZ4KD |
+| `bbr` / `droidspaces` / `better_net` / `rekernel` / `kpm` | 见参数说明 | 其它可选特性 |
+
+### 常用 make 目标
+
+```bash
+make test        # 离线单测（apk_cert 解析 + apply_finasu 注入，共 8 个用例）
+make lint        # shell / python / yaml 语法自检
+make check       # 只校验 FinaSU 版本 / UAPI / 签名（不编译）
+make build       # 完整编译并出 AK3 包
+make ak3 IMAGE=…  # 用已有 Image 直接打包
+```
+
+## 七、打包 AK3 与推送仓库
 
 ### 只想把已有 Image 打成 AK3
 
@@ -169,7 +205,7 @@ git commit -am "feat: 支持 FinaSU(FinaSU) 分支"
 git push -u origin feat/finasu-support
 ```
 
-## 七、刷完怎么确认成功
+## 八、刷完怎么确认成功
 
 ```bash
 # 管理器里应显示：内核版本 ...-<你的后缀>，KSU 版本 32960，UAPI 6
@@ -182,6 +218,6 @@ su -c 'ls /data/adb/ksu'
 
 ---
 
-## 八、致谢
+## 九、致谢
 
 构建配方来自 [cctv18](https://github.com/cctv18) / [Wuwan94](https://github.com/Wuwan94) 的 SM8850 自动化脚本，Root 方案来自 [LyraVoid/FinaSU](https://github.com/LyraVoid/FinaSU)，SUSFS 生态来自 [ShirkNeko/susfs4ksu](https://github.com/ShirkNeko/susfs4ksu)。本仓库只做了 FinaSU 对接层与校验层，未改动内核与管理器本体。
