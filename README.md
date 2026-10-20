@@ -1,14 +1,14 @@
-# FolkSU / FinaSU 适配版 SM8850 内核构建器
+# FinaSU 适配版 SM8850 内核构建器
 
-给 OPPO / 一加 / 真我 SM8850（骁龙 8 Elite Gen5）机型造一个**能被 FolkSU 管理器直接接管**的 6.12 内核。
+给 OPPO / 一加 / 真我 SM8850（骁龙 8 Elite Gen5）机型造一个**能被 FinaSU 管理器直接接管**的 6.12 内核。
 
-> **先说命名**：FolkSU 已经改名 **FinaSU**（作者 LyraVoid，仓库 `LyraVoid/FinaSU`，原 `LyraVoid/FolkSU` 会自动 301 跳转）。所以下面说"FolkSU"，指的就是现在发布包里叫 `FinaSU_*.apk` 的那个管理器。
+> **命名说明**：这个管理器原名 FolkSU，现已改名 **FinaSU**（作者 LyraVoid，仓库 `LyraVoid/FinaSU`，旧地址 `LyraVoid/FolkSU` 会自动 301 跳转）。本仓库统一用 FinaSU 这个叫法，发布包是 `FinaSU_*.apk`。
 
 ---
 
 ## 一、为什么原构建脚本刷完管理器"不认"
 
-上游 [Wuwan94/oppo_oplus_realme_sm8850](https://github.com/Wuwan94/oppo_oplus_realme_sm8850) 只对接了 BakaSU / SukiSU / KernelSU Next / 原版 KernelSU。FolkSU 用的是自己的一套内核侧代码，卡点有三个，**缺一个管理器就显示未安装内核或必须手动授权**：
+上游 [Wuwan94/oppo_oplus_realme_sm8850](https://github.com/Wuwan94/oppo_oplus_realme_sm8850) 只对接了 BakaSU / SukiSU / KernelSU Next / 原版 KernelSU。FinaSU 用的是自己的一套内核侧代码，卡点有三个，**缺一个管理器就显示未安装内核或必须手动授权**：
 
 | 卡点 | 内核侧 | 管理器侧 | 不对齐的后果 |
 |---|---|---|---|
@@ -33,14 +33,14 @@
 ## 二、仓库结构
 
 ```
-folksu-sm8850-builder/
-├── config/folksu.conf              ← 版本 / UAPI / 签名 的唯一真相源
+finasu-sm8850-builder/
+├── config/finasu.conf              ← 版本 / UAPI / 签名 的唯一真相源
 ├── scripts/
 │   ├── build.sh                    ← 主构建脚本（拉源码、打补丁、编译、打包、校验）
-│   ├── folksu.sh                   ← FolkSU 集成 + 版本/UAPI/签名校验（可单独 --check）
+│   ├── finasu.sh                   ← FinaSU 集成 + 版本/UAPI/签名校验（可单独 --check）
 │   ├── apk_cert.py                 ← 从任意管理器 APK 反推 cert size / hash / 版本号
 │   ├── pack-ak3.sh                 ← 已有 Image 直接打 AnyKernel3（不重新编译）
-│   ├── apply_folksu.py             ← 给上游 Wuwan94 仓库注入 folksu 选项（输出与 .patch 一致）
+│   ├── apply_finasu.py             ← 给上游 Wuwan94 仓库注入 finasu 选项（输出与 .patch 一致）
 │   ├── push-upstream.sh            ← 一键克隆上游 + 注入 + 建分支 + 推送/开 PR
 │   ├── init-repo.sh                ← 一键把本目录变成 GitHub 仓库并推送
 │   └── build-manager.sh            ← 可选：从源码构建你自己的管理器 APK
@@ -54,22 +54,22 @@ folksu-sm8850-builder/
 
 ### 用法 A：直接给上游仓库打补丁（最小改动）
 
-`patches/wuwan94-add-folksu.patch` 会给上游 **7 个 workflow + 7 个本地脚本**都加上 `FolkSU` 选项：
+`patches/wuwan94-add-finasu.patch` 会给上游 **7 个 workflow + 7 个本地脚本**都加上 `FinaSU` 选项：
 
 ```bash
 git clone https://github.com/Wuwan94/oppo_oplus_realme_sm8850.git
 cd oppo_oplus_realme_sm8850
-git apply /path/to/patches/wuwan94-add-folksu.patch
-git add -A && git commit -m "feat: 适配 FolkSU(FinaSU)" && git push
+git apply /path/to/patches/wuwan94-add-finasu.patch
+git add -A && git commit -m "feat: 适配 FinaSU(FinaSU)" && git push
 ```
 
-之后在 Actions 里跑 `fastbuild_*`，`KSU分支` 下拉框会多一个 **`folksu`**：
+之后在 Actions 里跑 `fastbuild_*`，`KSU分支` 下拉框会多一个 **`finasu`**：
 
 - 自动克隆 `LyraVoid/FinaSU` 并切到 `v1.0.4`
 - 校验 `KSU_VERSION=32960`、`UAPI=6`，不一致直接 fail（不会产出"看着能刷其实认不了"的包）
 - 把 `KSU_EXPECTED_SIZE/HASH` 塞进构建环境
 - 自动关掉 SUSFS（原因见第五节）
-- 包名标记为 `FolkSU`
+- 包名标记为 `FinaSU`
 
 ### 用法 B：用本仓库构建（干净、可复现）
 
@@ -87,9 +87,9 @@ KERNEL_VERSION=6.12.58 bash scripts/build.sh
 MANAGER_APK=./FinaSU_v1.0.4_32960-release.apk bash scripts/build.sh
 ```
 
-产物：`dist/AnyKernel3_FolkSU_<内核版本>_<后缀>_<特性>_<日期>.zip`（+ `.sha256`），直接进 recovery / KernelFlasher 刷入。
+产物：`dist/AnyKernel3_FinaSU_<内核版本>_<后缀>_<特性>_<日期>.zip`（+ `.sha256`），直接进 recovery / KernelFlasher 刷入。
 
-GitHub Actions 用法：推到自己的仓库 → Actions → **Build SM8850 Kernel (FolkSU / FinaSU)** → 选内核基线、填 `folksu_tag` / `folksu_version` → Run。想省事就把管理器 APK 直链填进 `manager_apk_url`，签名自动反推。
+GitHub Actions 用法：推到自己的仓库 → Actions → **Build SM8850 Kernel (FinaSU / FinaSU)** → 选内核基线、填 `finasu_tag` / `finasu_version` → Run。想省事就把管理器 APK 直链填进 `manager_apk_url`，签名自动反推。
 
 ---
 
@@ -101,11 +101,11 @@ GitHub Actions 用法：推到自己的仓库 → Actions → **Build SM8850 Ker
 # 1. 下载新 APK，读出它的真实签名与版本号
 python3 scripts/apk_cert.py FinaSU_v1.0.x_3xxxx-release.apk
 
-# 2. 在 config/folksu.conf 里同步四项
-FOLKSU_TAG=v1.0.x
-FOLKSU_MANAGER_VERSION=3xxxx
-FOLKSU_UAPI=<看新 tag 的 uapi/supercall.h>
-FOLKSU_CERT_SIZE / FOLKSU_CERT_HASH=<第 1 步的输出>
+# 2. 在 config/finasu.conf 里同步四项
+FINASU_TAG=v1.0.x
+FINASU_MANAGER_VERSION=3xxxx
+FINASU_UAPI=<看新 tag 的 uapi/supercall.h>
+FINASU_CERT_SIZE / FINASU_CERT_HASH=<第 1 步的输出>
 
 # 3. 先 --check 再编译
 bash scripts/build.sh --check
@@ -131,14 +131,14 @@ bash scripts/build.sh --check
 ### 只想把已有 Image 打成 AK3
 
 ```bash
-# 最短一条：其余全用默认值（FolkSU / 32960 / 6.12.23 / 默认后缀）
+# 最短一条：其余全用默认值（FinaSU / 32960 / 6.12.23 / 默认后缀）
 bash scripts/pack-ak3.sh work/common/out/arch/arm64/boot/Image
 
 # 或者
 make ak3 IMAGE=work/common/out/arch/arm64/boot/Image
 
 # 想改包名/附带模块
-KSU_TYPENAME=FolkSU KSU_VERSION=32960 KERNEL_VERSION=6.12.23 \
+KSU_TYPENAME=FinaSU KSU_VERSION=32960 KERNEL_VERSION=6.12.23 \
 WITH_LZ4KD=1 WITH_KPM=0 bash scripts/pack-ak3.sh /path/to/Image
 ```
 
@@ -150,23 +150,23 @@ WITH_LZ4KD=1 WITH_KPM=0 bash scripts/pack-ak3.sh /path/to/Image
 ### 推到自己仓库
 
 ```bash
-bash scripts/init-repo.sh folksu-sm8850-builder     # 建 public 仓库并推送
+bash scripts/init-repo.sh finasu-sm8850-builder     # 建 public 仓库并推送
 PRIVATE=1 bash scripts/init-repo.sh                 # 建私有仓库
 REMOTE_URL=git@github.com:me/xxx.git bash scripts/init-repo.sh   # 推到已有仓库
 ```
 
 没有 `gh` 命令时它会打印手动两条命令，不会瞎折腾。装好仓库后，Actions 里的
-**Build SM8850 Kernel (FolkSU / FinaSU)** 点一下就直接产出 AK3 包（Artifact 里下载）。
+**Build SM8850 Kernel (FinaSU / FinaSU)** 点一下就直接产出 AK3 包（Artifact 里下载）。
 
 ### 把适配推回上游 Wuwan94 仓库
 
 ```bash
 git clone https://github.com/Wuwan94/oppo_oplus_realme_sm8850.git
 cd oppo_oplus_realme_sm8850
-git checkout -b feat/folksu-support
-git apply /path/to/patches/wuwan94-add-folksu.patch
-git commit -am "feat: 支持 FolkSU(FinaSU) 分支"
-git push -u origin feat/folksu-support
+git checkout -b feat/finasu-support
+git apply /path/to/patches/wuwan94-add-finasu.patch
+git commit -am "feat: 支持 FinaSU(FinaSU) 分支"
+git push -u origin feat/finasu-support
 ```
 
 ## 七、刷完怎么确认成功
@@ -184,4 +184,4 @@ su -c 'ls /data/adb/ksu'
 
 ## 八、致谢
 
-构建配方来自 [cctv18](https://github.com/cctv18) / [Wuwan94](https://github.com/Wuwan94) 的 SM8850 自动化脚本，Root 方案来自 [LyraVoid/FinaSU](https://github.com/LyraVoid/FinaSU)，SUSFS 生态来自 [ShirkNeko/susfs4ksu](https://github.com/ShirkNeko/susfs4ksu)。本仓库只做了 FolkSU 对接层与校验层，未改动内核与管理器本体。
+构建配方来自 [cctv18](https://github.com/cctv18) / [Wuwan94](https://github.com/Wuwan94) 的 SM8850 自动化脚本，Root 方案来自 [LyraVoid/FinaSU](https://github.com/LyraVoid/FinaSU)，SUSFS 生态来自 [ShirkNeko/susfs4ksu](https://github.com/ShirkNeko/susfs4ksu)。本仓库只做了 FinaSU 对接层与校验层，未改动内核与管理器本体。

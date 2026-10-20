@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#  从源码构建 FolkSU(FinaSU) 管理器 APK（可选功能）
+#  从源码构建 FinaSU(FinaSU) 管理器 APK（可选功能）
 #
 #  说明：这层脚本只做「环境预检 + 调用上游官方构建流程」，真正的编译逻辑在
 #        LyraVoid/FinaSU 仓库的 build.sh 里（apk / repack 两个目标）。
@@ -14,17 +14,17 @@
 #
 #  用法:
 #    bash scripts/build-manager.sh                 # 用默认 tag
-#    FOLKSU_TAG=v1.0.4 bash scripts/build-manager.sh
+#    FINASU_TAG=v1.0.4 bash scripts/build-manager.sh
 #
 #  产物：work/manager/FinaSU/dist/*.apk
-#  构建完会打印该 APK 的证书 size/hash，把它填进 config/folksu.conf 即可让内核信任你自己的管理器。
+#  构建完会打印该 APK 的证书 size/hash，把它填进 config/finasu.conf 即可让内核信任你自己的管理器。
 # ==============================================================================
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck disable=SC1091
-. "$REPO_ROOT/config/folksu.conf"
+. "$REPO_ROOT/config/finasu.conf"
 
 log()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 info() { printf '\033[1;34m  ·\033[0m %s\n' "$*"; }
@@ -47,13 +47,13 @@ command -v cargo >/dev/null 2>&1 || die "缺少 Rust / cargo"
 rustup target list --installed 2>/dev/null | grep -q aarch64-linux-android \
     || die "缺少 Rust target：rustup target add aarch64-linux-android"
 
-log "克隆 FinaSU 源码 ($FOLKSU_TAG)"
+log "克隆 FinaSU 源码 ($FINASU_TAG)"
 cd "$WORK"
 if [ ! -d FinaSU/.git ]; then
-    git clone --filter=blob:none "$FOLKSU_REPO" FinaSU
+    git clone --filter=blob:none "$FINASU_REPO" FinaSU
 fi
 git -C FinaSU fetch --tags --quiet || true
-git -C FinaSU checkout --quiet "$FOLKSU_TAG"
+git -C FinaSU checkout --quiet "$FINASU_TAG"
 
 cd FinaSU
 PROPS="manager/keystore.properties"
@@ -75,9 +75,9 @@ log "新 APK 的签名信息"
 python3 "$SCRIPT_DIR/apk_cert.py" "$APK"
 cat <<EOF
 
-把上面的值填进 config/folksu.conf：
-  FOLKSU_CERT_SIZE=...
-  FOLKSU_CERT_HASH=...
+把上面的值填进 config/finasu.conf：
+  FINASU_CERT_SIZE=...
+  FINASU_CERT_HASH=...
 然后重新构建内核，你的内核才会信任这个自己签名的管理器。
-注意：KSU_VERSION 仍取源码提交数（$FOLKSU_TAG → $FOLKSU_MANAGER_VERSION），换 tag 时两者要一起改。
+注意：KSU_VERSION 仍取源码提交数（$FINASU_TAG → $FINASU_MANAGER_VERSION），换 tag 时两者要一起改。
 EOF

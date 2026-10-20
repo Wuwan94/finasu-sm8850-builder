@@ -4,7 +4,7 @@
 #
 #  用法:
 #    bash scripts/init-repo.sh                       # 交互式，按提示走
-#    bash scripts/init-repo.sh folksu-sm8850-builder # 指定仓库名（默认 public）
+#    bash scripts/init-repo.sh finasu-sm8850-builder # 指定仓库名（默认 public）
 #    PRIVATE=1 bash scripts/init-repo.sh             # 建私有仓库
 #    REMOTE_URL=git@github.com:me/repo.git bash scripts/init-repo.sh   # 推到已有仓库
 #
@@ -28,7 +28,7 @@ die()  { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 REPO_NAME="${1:-$(basename "$REPO_ROOT")}"
 VISIBILITY="--public"
 if [ "${PRIVATE:-0}" = "1" ]; then VISIBILITY="--private"; fi
-COMMIT_MSG="${COMMIT_MSG:-feat: FolkSU(FinaSU) 适配 + AK3 构建脚本}"
+COMMIT_MSG="${COMMIT_MSG:-feat: FinaSU(FinaSU) 适配 + AK3 构建脚本}"
 
 # ---- 0. git 身份（缺了 commit 会直接失败，给个可读提示）
 if ! git config user.name >/dev/null 2>&1 || ! git config user.email >/dev/null 2>&1; then
@@ -87,4 +87,4 @@ fi
 
 log "完成"
 info "仓库地址：$(git remote get-url origin 2>/dev/null || echo '—')"
-info "下一步：Actions 里跑 “Build SM8850 Kernel (FolkSU / FinaSU)” 即可出 AK3 包"
+info "下一步：Actions 里跑 “Build SM8850 Kernel (FinaSU / FinaSU)” 即可出 AK3 包"

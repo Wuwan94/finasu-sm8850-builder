@@ -1,4 +1,4 @@
-name: Build SM8850 Kernel (FolkSU / FinaSU)
+name: Build SM8850 Kernel (FinaSU)
 
 on:
   workflow_dispatch:
@@ -13,12 +13,12 @@ on:
           - '6.12.38'   # 一加 Ace 6T 源码基线
           - '6.12.58'   # Pad 3 Pro 源码基线
           - '6.12.69-gki'
-      folksu_tag:
-        description: 'FolkSU/FinaSU 源码 tag（要与管理器版本配套）'
+      finasu_tag:
+        description: 'FinaSU 源码 tag（要与管理器版本配套）'
         required: true
         type: string
         default: 'v1.0.4'
-      folksu_version:
+      finasu_version:
         description: '管理器 versionCode（必须等于 30000 + 该 tag 的提交数）'
         required: true
         type: string
@@ -34,7 +34,7 @@ on:
         type: string
         default: ''
       builtin_ksu:
-        description: '把 FolkSU 编译进内核（关闭则给 init_boot 里 kernelsu.ko 的 LKM 模式用；刷过 LKM root 的机器请选 false）'
+        description: '把 FinaSU 编译进内核（关闭则给 init_boot 里 kernelsu.ko 的 LKM 模式用；刷过 LKM root 的机器请选 false）'
         required: true
         type: boolean
         default: true
@@ -125,8 +125,8 @@ jobs:
       - name: 构建
         env:
           KERNEL_VERSION: ${{ inputs.kernel_version }}
-          FOLKSU_TAG: ${{ inputs.folksu_tag }}
-          FOLKSU_MANAGER_VERSION: ${{ inputs.folksu_version }}
+          FINASU_TAG: ${{ inputs.finasu_tag }}
+          FINASU_MANAGER_VERSION: ${{ inputs.finasu_version }}
           MANAGER_APK: ${{ inputs.manager_apk_url != '' && 'manager.apk' || '' }}
           CUSTOM_SUFFIX: ${{ inputs.kernel_suffix }}
           APPLY_KSU: ${{ inputs.builtin_ksu && '1' || '0' }}
@@ -150,7 +150,7 @@ jobs:
         # 用户下载到的是「包含刷机包的 zip」，管理器会报 ZIP is missing root anykernel.sh
         uses: actions/upload-artifact@v7
         with:
-          name: AnyKernel3-FolkSU-${{ inputs.kernel_version }}
+          name: AnyKernel3-FinaSU-${{ inputs.kernel_version }}
           path: |
             dist/*.zip
             dist/*.sha256
@@ -170,7 +170,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="folksu-${KERNEL_VERSION:-${{ inputs.kernel_version }}}-$(date +%Y%m%d-%H%M)"
+          TAG="finasu-${KERNEL_VERSION:-${{ inputs.kernel_version }}}-$(date +%Y%m%d-%H%M)"
           gh release create "$TAG" dist/*.zip dist/*.sha256 \
-            --title "FolkSU ${{ inputs.folksu_tag }} / kernel ${{ inputs.kernel_version }}" \
-            --notes "管理器版本号必须是 ${{ inputs.folksu_version }}（UAPI 见 config/folksu.conf）。刷入前请确认机型与内核基线匹配。"
+            --title "FinaSU ${{ inputs.finasu_tag }} / kernel ${{ inputs.kernel_version }}" \
+            --notes "管理器版本号必须是 ${{ inputs.finasu_version }}（UAPI 见 config/finasu.conf）。刷入前请确认机型与内核基线匹配。"

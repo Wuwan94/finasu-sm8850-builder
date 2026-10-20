@@ -96,16 +96,16 @@ def main() -> int:
     digest = hashlib.sha256(cert).hexdigest()
     version = guess_version(args.apk)
     if args.shell:
-        print(f'FOLKSU_CERT_SIZE="{size_hex}"')
-        print(f'FOLKSU_CERT_HASH="{digest}"')
+        print(f'FINASU_CERT_SIZE="{size_hex}"')
+        print(f'FINASU_CERT_HASH="{digest}"')
         if version:
-            print(f'FOLKSU_MANAGER_VERSION="{version}"')
+            print(f'FINASU_MANAGER_VERSION="{version}"')
         print(f'CERT_SCHEME="{scheme}"')
     else:
         print(f"签名方案 : {scheme}")
         print(f"证书长度 : {size_hex} ({len(cert)} 字节)")
         print(f"证书哈希 : {digest}")
-        print(f"推断版本 : {version or '（文件名里没有版本号，请用 FOLKSU_MANAGER_VERSION 指定）'}")
+        print(f"推断版本 : {version or '（文件名里没有版本号，请用 FINASU_MANAGER_VERSION 指定）'}")
         print()
         print("对应的 kbuild 参数：")
         print(f"  KSU_EXPECTED_SIZE={size_hex}")

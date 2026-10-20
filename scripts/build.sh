@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#  欧加真 SM8850 6.12 内核构建器（FolkSU / FinaSU 适配版）
+#  欧加真 SM8850 6.12 内核构建器（FinaSU / FinaSU 适配版）
 #
 #  用法:
-#    bash scripts/build.sh                 # 用 config/folksu.conf 的默认值
+#    bash scripts/build.sh                 # 用 config/finasu.conf 的默认值
 #    KERNEL_VERSION=6.12.58 bash scripts/build.sh
 #    MANAGER_APK=./FinaSU_v1.0.4_32960-release.apk bash scripts/build.sh   # 自动反推签名
 #    bash scripts/build.sh --check          # 只校验版本 / UAPI / 签名，不编译
@@ -23,7 +23,7 @@ die()  { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ------------------------------------------------------------------ 配置
 # shellcheck disable=SC1091
-. "$REPO_ROOT/config/folksu.conf"
+. "$REPO_ROOT/config/finasu.conf"
 
 # 上游补丁出处：钉在验证过的提交上，避免上游改动把构建带崩
 UPSTREAM_REPO="${UPSTREAM_REPO:-Wuwan94/oppo_oplus_realme_sm8850}"
@@ -58,7 +58,7 @@ APPLY_DROIDSPACES="${APPLY_DROIDSPACES:-0}"   # 0 / standard / extend
 APPLY_ADIOS="${APPLY_ADIOS:-1}"
 APPLY_REKERNEL="${APPLY_REKERNEL:-0}"
 APPLY_BBG="${APPLY_BBG:-1}"
-APPLY_SUSFS=0                                 # FolkSU 内核树不兼容 susfs4ksu 的 KSU 侧补丁
+APPLY_SUSFS=0                                 # FinaSU 内核树不兼容 susfs4ksu 的 KSU 侧补丁
 
 JOBS="${JOBS:-$(nproc --all 2>/dev/null || echo 4)}"
 WORKDIR="${WORKDIR:-$REPO_ROOT/work}"
@@ -83,12 +83,12 @@ need curl
 if [ -n "${MANAGER_APK:-}" ]; then
     [ -f "$MANAGER_APK" ] || die "找不到 MANAGER_APK：$MANAGER_APK"
     need python3
-    CFG_VERSION="$FOLKSU_MANAGER_VERSION"
+    CFG_VERSION="$FINASU_MANAGER_VERSION"
     log "从管理器 APK 反推签名：$MANAGER_APK"
     eval "$(python3 "$SCRIPT_DIR/apk_cert.py" "$MANAGER_APK" --shell)"
-    info "cert=$FOLKSU_CERT_SIZE  sha256=${FOLKSU_CERT_HASH:0:16}…"
-    if [ "${FOLKSU_MANAGER_VERSION:-}" != "$CFG_VERSION" ]; then
-        die "APK 版本(${FOLKSU_MANAGER_VERSION:-未识别}) 与配置的 $CFG_VERSION 不一致：请同时改 FOLKSU_TAG / FOLKSU_MANAGER_VERSION"
+    info "cert=$FINASU_CERT_SIZE  sha256=${FINASU_CERT_HASH:0:16}…"
+    if [ "${FINASU_MANAGER_VERSION:-}" != "$CFG_VERSION" ]; then
+        die "APK 版本(${FINASU_MANAGER_VERSION:-未识别}) 与配置的 $CFG_VERSION 不一致：请同时改 FINASU_TAG / FINASU_MANAGER_VERSION"
     fi
 fi
 
@@ -96,15 +96,15 @@ log "构建配置"
 cat <<EOF
     内核版本   : $KERNEL_VERSION
     内核后缀   : -$CUSTOM_SUFFIX
-    管理器     : FolkSU/FinaSU $FOLKSU_TAG (versionCode $FOLKSU_MANAGER_VERSION, UAPI $FOLKSU_UAPI)
-    管理器签名 : $FOLKSU_CERT_SIZE / ${FOLKSU_CERT_HASH:0:16}…
+    管理器     : FinaSU $FINASU_TAG (versionCode $FINASU_MANAGER_VERSION, UAPI $FINASU_UAPI)
+    管理器签名 : $FINASU_CERT_SIZE / ${FINASU_CERT_HASH:0:16}…
     可选特性   : KPM=$USE_KPM LZ4=$APPLY_LZ4 LZ4KD=$APPLY_LZ4KD BBR=$APPLY_BBR ADIOS=$APPLY_ADIOS ReKernel=$APPLY_REKERNEL BBG=$APPLY_BBG DSS=$APPLY_DROIDSPACES NET=$APPLY_BETTERNET
-    SUSFS      : 关闭（FolkSU 内核树已重构，susfs4ksu 的 KSU 侧联动补丁不兼容）
+    SUSFS      : 关闭（FinaSU 内核树已重构，susfs4ksu 的 KSU 侧联动补丁不兼容）
     并行度     : $JOBS    工作目录: $WORKDIR
 EOF
 
 # shellcheck disable=SC1091
-. "$SCRIPT_DIR/folksu.sh"
+. "$SCRIPT_DIR/finasu.sh"
 
 if [ "$CHECK_ONLY" = "1" ]; then
     tmp="$(mktemp -d)"
@@ -112,7 +112,7 @@ if [ "$CHECK_ONLY" = "1" ]; then
     mkdir -p "$tmp/ksu/drivers"
     : > "$tmp/ksu/drivers/Makefile"
     : > "$tmp/ksu/drivers/Kconfig"
-    folksu_integrate "$tmp" "$tmp/ksu"
+    finasu_integrate "$tmp" "$tmp/ksu"
     log "预检通过（未编译）"
     exit 0
 fi
@@ -213,12 +213,12 @@ DEFCONFIG="$WORKDIR/common/arch/arm64/configs/gki_defconfig"
 sed -i "s/^CONFIG_LOCALVERSION=.*/CONFIG_LOCALVERSION=\"-${CUSTOM_SUFFIX}\"/" "$DEFCONFIG"
 echo "CONFIG_LOCALVERSION_AUTO=n" >> "$DEFCONFIG"
 
-# ------------------------------------------------------------------ FolkSU
+# ------------------------------------------------------------------ FinaSU
 if [ "$APPLY_KSU" = "1" ]; then
-    log "集成 FolkSU(FinaSU) 内核侧代码"
-    folksu_integrate "$WORKDIR" "$WORKDIR/common"
+    log "集成 FinaSU(FinaSU) 内核侧代码"
+    finasu_integrate "$WORKDIR" "$WORKDIR/common"
 else
-    log "跳过 FolkSU 内核侧代码（APPLY_KSU=0，LKM 模式）"
+    log "跳过 FinaSU 内核侧代码（APPLY_KSU=0，LKM 模式）"
     info "内核不带 CONFIG_KSU，root 由 init_boot 里的 kernelsu.ko 在开机时加载"
 fi
 
@@ -402,13 +402,13 @@ export LIBCLANG_PATH="$WORKDIR/clang19/lib"
 export LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
 export LD=ld.lld HOSTLD=ld.lld AR=llvm-ar NM=llvm-nm AS=clang READELF=llvm-readelf
 export OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump OBJSIZE=llvm-size STRIP=llvm-strip
-export KSU_EXPECTED_SIZE="$FOLKSU_CERT_SIZE"
-export KSU_EXPECTED_HASH="$FOLKSU_CERT_HASH"
-export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-folksu}"
+export KSU_EXPECTED_SIZE="$FINASU_CERT_SIZE"
+export KSU_EXPECTED_HASH="$FINASU_CERT_HASH"
+export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-finasu}"
 export KBUILD_BUILD_HOST="${KBUILD_BUILD_HOST:-builder}"
 
 KCFLAGS=" -no-canonical-prefixes -O2 -pipe -Wno-error -fno-stack-protector -D__ANDROID_COMMON_KERNEL__"
-# FolkSU 的源码头用的是 #include "uapi/app_profile.h"，依赖 Kbuild 里的
+# FinaSU 的源码头用的是 #include "uapi/app_profile.h"，依赖 Kbuild 里的
 # ccflags-y += -I$(KSU_KERNEL_DIR)/include 生效；在 symlink 挂载 + O= 组合下这条
 # 有时不作用于子目录对象（CI 上实测 core/init.o 找不到）。这里用 KCFLAGS 兜底，
 # 让头文件路径对整棵树都可见。
@@ -436,7 +436,7 @@ IMG="$WORKDIR/common/out/arch/arm64/boot/Image"
 # ------------------------------------------------------------------ 校验
 if [ "$APPLY_KSU" = "1" ]; then
     log "编译产物校验"
-    if ! folksu_verify "$BUILD_LOG" "$IMG"; then
+    if ! finasu_verify "$BUILD_LOG" "$IMG"; then
         die "校验未通过：这个包刷上去管理器也认不了，先别刷（详见上方提示）"
     fi
 else
@@ -467,7 +467,7 @@ cd AnyKernel3
 if [ "$APPLY_LZ4KD" = "1" ]; then curl -fsSLO "$RAW/zram.zip"; fi
 if [ "$USE_KPM" = "1" ]; then curl -fsSLO https://github.com/cctv18/KPatch-Next/releases/latest/download/kpn.zip; fi
 
-ZIP_NAME="AnyKernel3_FolkSU_${KERNEL_VERSION}_${CUSTOM_SUFFIX}"
+ZIP_NAME="AnyKernel3_FinaSU_${KERNEL_VERSION}_${CUSTOM_SUFFIX}"
 if [ "$APPLY_LZ4" = "1" ]; then ZIP_NAME="${ZIP_NAME}_lz4-zstd"; fi
 if [ "$APPLY_LZ4KD" = "1" ]; then ZIP_NAME="${ZIP_NAME}_lz4kd"; fi
 if [ "$APPLY_BBR" != "0" ]; then ZIP_NAME="${ZIP_NAME}_bbr"; fi
@@ -480,15 +480,15 @@ ZIP_NAME="${ZIP_NAME}_$(date +%Y%m%d).zip"
 
 {
     echo "Kernel      : $KERNEL_VERSION (-$CUSTOM_SUFFIX)"
-    echo "Root        : FolkSU/FinaSU $FOLKSU_TAG"
-    echo "KSU_VERSION : $FOLKSU_MANAGER_VERSION   (管理器版本号必须一致)"
-    echo "KSU UAPI    : $FOLKSU_UAPI"
-    echo "Manager cert: $FOLKSU_CERT_SIZE ${FOLKSU_CERT_HASH}"
+    echo "Root        : FinaSU $FINASU_TAG"
+    echo "KSU_VERSION : $FINASU_MANAGER_VERSION   (管理器版本号必须一致)"
+    echo "KSU UAPI    : $FINASU_UAPI"
+    echo "Manager cert: $FINASU_CERT_SIZE ${FINASU_CERT_HASH}"
     echo "Built at    : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 } > ak3.txt
 zip -qr "$DIST_DIR/$ZIP_NAME" ./*
 
-# 按 FinaSU/FolkSU 管理器内置 ksud 的规则自检包结构
+# 按 FinaSU/FinaSU 管理器内置 ksud 的规则自检包结构
 # （userspace/ksud/src/anykernel3.rs：root 必须有 anykernel.sh、必须有 tools/、
 #   不能有 module.prop、不能有重复/越界条目）。结构不对时管理器会直接报
 #   "ZIP is missing root anykernel.sh"，所以这里先卡住。
@@ -543,4 +543,4 @@ sha256sum "$ZIP_NAME" > "$ZIP_NAME.sha256"
 log "完成"
 info "刷机包 : $DIST_DIR/$ZIP_NAME"
 info "签名值 : $(cat "$ZIP_NAME.sha256")"
-info "管理器 : FinaSU 版本号必须是 $FOLKSU_MANAGER_VERSION（对应 $FOLKSU_TAG）"
+info "管理器 : FinaSU 版本号必须是 $FINASU_MANAGER_VERSION（对应 $FINASU_TAG）"

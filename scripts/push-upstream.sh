@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#  把 FolkSU 适配推回 Wuwan94/oppo_oplus_realme_sm8850（或你自己的 fork）
+#  把 FinaSU 适配推回 Wuwan94/oppo_oplus_realme_sm8850（或你自己的 fork）
 #
 #  用法:
 #    bash scripts/push-upstream.sh                  # 建分支 + 提交，问你要不要推
@@ -10,9 +10,9 @@
 #    bash scripts/push-upstream.sh --dry-run        # 只做到 commit，不碰远程
 #
 #  会做三件事:
-#    1. 克隆上游（默认 main），新建分支 feat/folksu-support
-#    2. 注入 FolkSU 支持（14 个文件：7 个 workflow + 7 个本地脚本）
-#       优先 git apply 补丁，没有补丁就用 scripts/apply_folksu.py 现算（两者输出等价）
+#    1. 克隆上游（默认 main），新建分支 feat/finasu-support
+#    2. 注入 FinaSU 支持（14 个文件：7 个 workflow + 7 个本地脚本）
+#       优先 git apply 补丁，没有补丁就用 scripts/apply_finasu.py 现算（两者输出等价）
 #    3. 附带 local/pack_ak3.sh（Image → AK3 打包脚本），一起提交
 #
 #  注意: 改 .github/workflows 需要 token 带 workflow 权限；用 HTTPS 时
@@ -22,16 +22,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PATCH="$REPO_ROOT/patches/wuwan94-add-folksu.patch"
-# 本仓库里的补丁位置（如果是从 folksu-sm8850-builder 里跑）
-[ -f "$PATCH" ] || PATCH="$REPO_ROOT/../patches/wuwan94-add-folksu.patch"
+PATCH="$REPO_ROOT/patches/wuwan94-add-finasu.patch"
+# 本仓库里的补丁位置（如果是从 finasu-sm8850-builder 里跑）
+[ -f "$PATCH" ] || PATCH="$REPO_ROOT/../patches/wuwan94-add-finasu.patch"
 
 log()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 info() { printf '\033[1;34m  ·\033[0m %s\n' "$*"; }
 die()  { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 
 REPO_URL="${UPSTREAM_URL:-https://github.com/Wuwan94/oppo_oplus_realme_sm8850.git}"
-BRANCH="${BRANCH:-feat/folksu-support}"
+BRANCH="${BRANCH:-feat/finasu-support}"
 DO_PUSH=0
 DO_PR=0
 WORK="${WORKDIR:-$REPO_ROOT/work/upstream}"
@@ -48,7 +48,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
-[ -f "$PATCH" ] || die "找不到补丁：$PATCH（先在 folksu-sm8850-builder 的上一级目录找 patches/）"
+[ -f "$PATCH" ] || die "找不到补丁：$PATCH（先在 finasu-sm8850-builder 的上一级目录找 patches/）"
 
 log "准备上游工作副本"
 mkdir -p "$(dirname "$WORK")"
@@ -63,14 +63,14 @@ cd "$WORK"
 git checkout -q -B "$BRANCH" origin/HEAD 2>/dev/null || git checkout -q -B "$BRANCH"
 info "分支：$BRANCH（基于 $(git rev-parse --short HEAD)）"
 
-log "注入 FolkSU 支持"
+log "注入 FinaSU 支持"
 git checkout -q -- . 2>/dev/null || true
 if [ -f "${PATCH:-}" ] && git apply --check "$PATCH" 2>/dev/null; then
     git apply "$PATCH"
     info "已应用补丁 $PATCH"
 elif command -v python3 >/dev/null 2>&1; then
-    info "没有可用补丁，改用 scripts/apply_folksu.py 现场注入"
-    python3 "$SCRIPT_DIR/apply_folksu.py" . || die "注入失败：上游结构变了，看上面的 [FAIL] 行"
+    info "没有可用补丁，改用 scripts/apply_finasu.py 现场注入"
+    python3 "$SCRIPT_DIR/apply_finasu.py" . || die "注入失败：上游结构变了，看上面的 [FAIL] 行"
 else
     die "既没有可用的补丁，也没有 python3"
 fi
@@ -84,12 +84,12 @@ info "local/pack_ak3.sh"
 
 log "提交"
 git add -A
-git -c core.fileMode=false commit -q -m "feat: 支持 FolkSU(FinaSU) 分支 + 新增 Image 转 AK3 脚本
+git -c core.fileMode=false commit -q -m "feat: 支持 FinaSU(FinaSU) 分支 + 新增 Image 转 AK3 脚本
 
-- workflow / 本地脚本新增 folksu 选项（7 个 fastbuild + 7 个 builder）
+- workflow / 本地脚本新增 finasu 选项（7 个 fastbuild + 7 个 builder）
 - 内核侧：克隆 LyraVoid/FinaSU 指定 tag，校验 KSU_VERSION / UAPI / 管理器签名
 - 签名：KSU_EXPECTED_SIZE / KSU_EXPECTED_HASH 由 APK 实测得出（v1.0.4 = 0x103 / f7cecef2…）
-- SUSFS：FolkSU 内核树已重构，强制关闭，避免产出假 SUSFS 包
+- SUSFS：FinaSU 内核树已重构，强制关闭，避免产出假 SUSFS 包
 - local/pack_ak3.sh：只把已有 Image 打成 AnyKernel3 包，不重新编译"
 info "$(git log -1 --oneline)"
 
@@ -120,4 +120,4 @@ fi
 
 log "完成"
 info "分支已推送：$BRANCH"
-info "Actions 里对应 workflow 的 KSU分支 下拉框会多出 folksu"
+info "Actions 里对应 workflow 的 KSU分支 下拉框会多出 finasu"

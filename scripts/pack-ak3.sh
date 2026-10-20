@@ -8,7 +8,7 @@
 #
 #  可选（环境变量，都有默认值）:
 #    MANIFEST        oppo+oplus+realme   机型标识，只影响包名
-#    KSU_TYPENAME    FolkSU              管理器名，只影响包名与 ak3.txt
+#    KSU_TYPENAME    FinaSU              管理器名，只影响包名与 ak3.txt
 #    KSU_VERSION     32960               内核里的 KSU 版本号
 #    KERNEL_VERSION  6.12.23             内核基线
 #    CUSTOM_SUFFIX   android16-5-...-4k  内核后缀
@@ -32,7 +32,7 @@ if [ -z "$IMAGE" ] || [ ! -f "$IMAGE" ]; then
 fi
 
 MANIFEST="${MANIFEST:-oppo+oplus+realme}"
-KSU_TYPENAME="${KSU_TYPENAME:-FolkSU}"
+KSU_TYPENAME="${KSU_TYPENAME:-FinaSU}"
 KSU_VERSION="${KSU_VERSION:-32960}"
 KERNEL_VERSION="${KERNEL_VERSION:-6.12.23}"
 CUSTOM_SUFFIX="${CUSTOM_SUFFIX:-android16-5-ga8f88ad96df3-ab13929693-4k}"
