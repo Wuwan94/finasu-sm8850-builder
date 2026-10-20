@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#  欧加真 SM8850 6.12 内核构建器（FinaSU / FinaSU 适配版）
+#  欧加真 SM8850 6.12 内核构建器（FinaSU 适配版）
 #
 #  用法:
 #    bash scripts/build.sh                 # 用 config/finasu.conf 的默认值
@@ -48,6 +48,7 @@ case "$KERNEL_VERSION" in
 esac
 CUSTOM_SUFFIX="${CUSTOM_SUFFIX:-$DEFAULT_SUFFIX}"
 
+USE_CCACHE="${USE_CCACHE:-0}"              # 1 = 启用 ccache（配合 CI 缓存能省 10 分钟）
 APPLY_KSU="${APPLY_KSU:-1}"   # 0 = 不内置 KSU（给 init_boot 里 kernelsu.ko 的 LKM 模式用）
 USE_KPM="${USE_KPM:-0}"                       # KPatch-Next 独立 KPM（直接改 Image）
 APPLY_LZ4="${APPLY_LZ4:-1}"                   # lz4 1.10.0 + zstd 1.5.7
@@ -126,7 +127,7 @@ if [ "$INSTALL_DEPS" = "1" ]; then
     if [ "$(id -u)" -ne 0 ]; then SUDO="sudo"; fi
     $SUDO apt-get update -qq
     $SUDO apt-get install -y --no-install-recommends \
-        bc bison flex libssl-dev libelf-dev libdw-dev dwarves cpio zip unzip rsync \
+        bc bison flex libssl-dev libelf-dev libdw-dev dwarves cpio zip unzip rsync ccache \
         gcc binutils make python3 perl xz-utils tar ca-certificates
 fi
 for c in make gcc bc flex bison patch; do need "$c"; done
@@ -145,10 +146,18 @@ fi
 mkdir -p "$WORKDIR" "$DIST_DIR"
 cd "$WORKDIR"
 
+# 磁盘预检：6.12 整树编译 + 解压需要 25GB 上下
+AVAIL_KB="$(df -Pk "$WORKDIR" | awk 'NR==2{print $4}')"
+if [ "${AVAIL_KB:-0}" -lt 25000000 ]; then
+    die "可用磁盘不足 25GB（当前约 $((AVAIL_KB / 1024 / 1024)) GB），6.12 编译会被 OOM/写满"
+fi
+info "可用磁盘：约 $((AVAIL_KB / 1024 / 1024)) GB"
+
 fetch() { # fetch <url> <outfile>
     if [ -s "$2" ]; then info "已存在 $(basename "$2")，跳过下载"; return 0; fi
     info "下载 $(basename "$2")"
-    curl -fL --retry 3 --retry-delay 2 -o "$2.part" "$1"
+    # -C - 断点续传：620MB 的源码包中断后不用从头再下
+    curl -fL -C - --retry 5 --retry-all-errors --retry-delay 3 -o "$2.part" "$1"
     mv "$2.part" "$2"
 }
 
@@ -215,7 +224,7 @@ echo "CONFIG_LOCALVERSION_AUTO=n" >> "$DEFCONFIG"
 
 # ------------------------------------------------------------------ FinaSU
 if [ "$APPLY_KSU" = "1" ]; then
-    log "集成 FinaSU(FinaSU) 内核侧代码"
+    log "集成 FinaSU 内核侧代码"
     finasu_integrate "$WORKDIR" "$WORKDIR/common"
 else
     log "跳过 FinaSU 内核侧代码（APPLY_KSU=0，LKM 模式）"
@@ -224,11 +233,20 @@ fi
 
 # ------------------------------------------------------------------ 补丁
 apply_patch() { # apply_patch <patch> <strip> [soft]
-    local p="$1" s="${2:-1}" soft="${3:-0}"
+    local p="$1" s="${2:-1}" soft="${3:-0}" out
     if [ ! -s "$p" ]; then warn "补丁不存在，跳过：$p"; return 0; fi
-    if patch -p"$s" -N -F 3 < "$p" >/dev/null 2>&1; then
+    # --forward：已应用过的 hunk 自动跳过，不会卡在交互式提问上
+    if out="$(patch -p"$s" -N -F 3 --forward < "$p" 2>&1)"; then
         info "已应用 $(basename "$p")"
-    elif [ "$soft" = "1" ]; then
+        return 0
+    fi
+    # 重跑时补丁已在树上：patch 会报 “previously applied” 并返回非 0
+    if printf '%s' "$out" | grep -q "previously applied"; then
+        info "已应用过，跳过：$(basename "$p")"
+        return 0
+    fi
+    printf '%s\n' "$out" | tail -5 | sed 's/^/      /' >&2
+    if [ "$soft" = "1" ]; then
         warn "补丁有冲突（已尽量应用）：$(basename "$p")"
     else
         die "补丁应用失败：$(basename "$p")（内核源码或上游补丁已变动）"
@@ -262,6 +280,16 @@ if [ "$APPLY_DROIDSPACES" != "0" ]; then
     apply_patch sysvipc.patch 1 1
     apply_patch midas.patch 1 1
     apply_patch ntsync.patch 1 1
+fi
+
+# 补丁冲突残留统计（上游会把这部分作为 Rejects 产物上传）
+REJ_LIST="$(find "$WORKDIR/common" -name '*.rej' 2>/dev/null | head -20 || true)"
+if [ -n "$REJ_LIST" ]; then
+    warn "以下补丁存在冲突残留（.rej）："
+    printf '%s\n' "$REJ_LIST" | sed 's/^/      /' >&2
+    # 收集到独立目录，CI 里作为产物上传，方便排查
+    mkdir -p "$WORKDIR/rejects"
+    find "$WORKDIR/common" -name '*.rej' -exec cp --parents {} "$WORKDIR/rejects" \; 2>/dev/null || true
 fi
 
 if [ "$APPLY_BBG" = "1" ]; then
@@ -396,7 +424,21 @@ sed -i 's/check_defconfig//' "$WORKDIR/common/build.config.gki"
 log "开始编译（$JOBS 线程，预计 15~30 分钟）"
 export PATH="$WORKDIR/clang19/bin:$WORKDIR/build-tools/bin:$WORKDIR/rust/bin:$PATH"
 CLANG_DIR="$WORKDIR/clang19/bin"
-export CC="$CLANG_DIR/clang" HOSTCC="$CLANG_DIR/clang"
+if [ "$USE_CCACHE" = "1" ] && command -v ccache >/dev/null 2>&1; then
+    export CCACHE_DIR="${CCACHE_DIR:-$HOME/.cache/ccache}"
+    export CCACHE_BASEDIR="$WORKDIR"
+    export CCACHE_COMPILERCHECK=content
+    export CCACHE_COMPRESS=1
+    export CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-5G}"
+    mkdir -p "$CCACHE_DIR"
+    export CC="ccache $CLANG_DIR/clang" HOSTCC="ccache $CLANG_DIR/clang"
+    info "ccache 已启用：$CCACHE_DIR（上限 $CCACHE_MAXSIZE）"
+else
+    export CC="$CLANG_DIR/clang" HOSTCC="$CLANG_DIR/clang"
+    if [ "$USE_CCACHE" = "1" ]; then
+        warn "USE_CCACHE=1 但系统没有 ccache，退回直接编译"
+    fi
+fi
 export RUSTC=rustc BINDGEN=bindgen
 export LIBCLANG_PATH="$WORKDIR/clang19/lib"
 export LLVM=1 LLVM_IAS=1 ARCH=arm64 SUBARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
@@ -427,7 +469,7 @@ cd "$WORKDIR/common"
 BUILD_LOG="$WORKDIR/build.log"
 # shellcheck disable=SC2086
 make -j"$JOBS" LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
-    CC="$CLANG_DIR/clang" HOSTCC="$CLANG_DIR/clang" LD=ld.lld HOSTLD=ld.lld \
+    CC="$CC" HOSTCC="$HOSTCC" LD=ld.lld HOSTLD=ld.lld \
     RUSTC=rustc OBJCOPY=llvm-objcopy O=out gki_defconfig Image 2>&1 | tee "$BUILD_LOG"
 
 IMG="$WORKDIR/common/out/arch/arm64/boot/Image"
@@ -463,6 +505,11 @@ cd "$WORKDIR"
 if [ ! -d AnyKernel3/.git ]; then git clone --depth=1 -q https://github.com/cctv18/AnyKernel3; fi
 rm -rf AnyKernel3/.git
 cp "$IMG" AnyKernel3/Image
+# AK3 模板里的 kernel.string 是上游作者的，改成 FinaSU 品牌 + 本次构建信息
+if [ -f AnyKernel3/anykernel.sh ]; then
+    sed -i "s|^kernel.string=.*|kernel.string=FinaSU $KERNEL_VERSION ($CUSTOM_SUFFIX) built by finasu-sm8850-builder|" \
+        AnyKernel3/anykernel.sh
+fi
 cd AnyKernel3
 if [ "$APPLY_LZ4KD" = "1" ]; then curl -fsSLO "$RAW/zram.zip"; fi
 if [ "$USE_KPM" = "1" ]; then curl -fsSLO https://github.com/cctv18/KPatch-Next/releases/latest/download/kpn.zip; fi

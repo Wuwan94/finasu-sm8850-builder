@@ -12,7 +12,7 @@ SHELL := /bin/bash
 IMAGE ?=
 MSG   ?= chore: update
 
-.PHONY: help check build ak3 push manager clean
+.PHONY: help check build ak3 push manager clean lint
 
 help:
 	@grep -E '^#( |$$)' $(MAKEFILE_LIST) | sed 's/^# \{0,1\}//;s/^=*$$//'
@@ -37,3 +37,9 @@ push:
 
 clean:
 	rm -rf work dist .ak3work
+
+lint:            # 语法自检（提交前跑一下）
+	@for f in scripts/*.sh; do bash -n "$$f" || exit 1; done
+	@python3 -c "import ast,sys;ast.parse(open('scripts/apk_cert.py',encoding='utf-8').read())"
+	@python3 -c "import yaml,glob;[yaml.safe_load(open(f,encoding='utf-8')) for f in glob.glob('.github/workflows/*.yml')]"
+	@echo "lint OK" 

@@ -97,6 +97,11 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  # 同一套参数重复触发时自动取消旧 run（分组带上各开关，A/B 两种变体互不影响）
+  group: build-${{ inputs.kernel_version }}-${{ inputs.builtin_ksu }}-${{ inputs.adios }}-${{ inputs.baseband_guard }}-${{ inputs.lz4 }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -109,6 +114,14 @@ jobs:
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
+
+      - name: 缓存 ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ccache-${{ inputs.kernel_version }}-${{ hashFiles('config/finasu.conf', 'scripts/build.sh') }}
+          restore-keys: |
+            ccache-${{ inputs.kernel_version }}-
 
       - name: 腾出磁盘空间
         run: |
@@ -140,6 +153,8 @@ jobs:
           APPLY_REKERNEL: ${{ inputs.rekernel && '1' || '0' }}
           APPLY_BBG: ${{ inputs.baseband_guard && '1' || '0' }}
           INSTALL_DEPS: '1'
+          USE_CCACHE: '1'
+          CCACHE_MAXSIZE: '5G'
         run: |
           # 没有 pipefail 的话 tee 会把 build.sh 的失败吞掉（第一次就踩了）
           set -o pipefail
@@ -156,6 +171,14 @@ jobs:
           path: dist/*.zip
           archive: false
           if-no-files-found: error
+
+      - name: 上传补丁冲突记录
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rejects-${{ github.run_number }}
+          path: work/rejects
+          if-no-files-found: ignore
 
       - name: 上传编译日志
         if: always()

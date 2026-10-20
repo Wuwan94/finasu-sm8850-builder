@@ -73,7 +73,10 @@ def read_apk(apk_path: str):
         if block_id in pairs:
             cert = _first_cert(pairs[block_id])
             return cert, ("v2" if block_id == V2_BLOCK_ID else "v3")
-    raise ValueError("签名块里既没有 v2 也没有 v3 签名")
+    raise ValueError(
+        "这个 APK 只有 v1 (JAR) 签名，内核的 apk_sign 读不到证书 —— "
+        "请让发布方用 v2/v3 签名重新打包"
+    )
 
 
 def guess_version(path: str):
@@ -86,6 +89,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="提取 APK 签名证书大小 / SHA-256")
     ap.add_argument("apk")
     ap.add_argument("--shell", action="store_true", help="输出 KEY=VALUE，便于 eval")
+    ap.add_argument("--kbuild", action="store_true",
+                    help="输出可直接粘进 kernel/Kbuild 的信任槽片段")
     args = ap.parse_args()
     try:
         cert, scheme = read_apk(args.apk)
@@ -101,6 +106,11 @@ def main() -> int:
         if version:
             print(f'FINASU_MANAGER_VERSION="{version}"')
         print(f'CERT_SCHEME="{scheme}"')
+    elif args.kbuild:
+        print("# 粘到 FinaSU 的 kernel/Kbuild 里（第二信任槽）")
+        print(f"KSU_EXPECTED_SIZE2 := 0x{len(cert):x}")
+        print(f"KSU_EXPECTED_HASH2 := {digest}")
+        print("KSU_SECOND_SIGNATURE_RELEASE := 1")
     else:
         print(f"签名方案 : {scheme}")
         print(f"证书长度 : {size_hex} ({len(cert)} 字节)")
