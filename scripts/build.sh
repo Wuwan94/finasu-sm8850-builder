@@ -22,6 +22,10 @@ warn() { printf '\033[1;33m[!]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ------------------------------------------------------------------ 配置
+# SUSFS 依赖内置 KSU（KSU 侧补丁要改 FinaSU 内核侧源码）
+if [ "$APPLY_SUSFS" = "1" ] && [ "$APPLY_KSU" != "1" ]; then
+    die "APPLY_SUSFS=1 需要 APPLY_KSU=1（SUSFS 的 KSU 侧适配改的是 FinaSU 内核代码）"
+fi
 # shellcheck disable=SC1091
 . "$REPO_ROOT/config/finasu.conf"
 
@@ -51,6 +55,7 @@ CUSTOM_SUFFIX="${CUSTOM_SUFFIX:-$DEFAULT_SUFFIX}"
 USE_CCACHE="${USE_CCACHE:-0}"              # 1 = 启用 ccache（配合 CI 缓存能省 10 分钟）
 APPLY_KSU="${APPLY_KSU:-1}"   # 0 = 不内置 KSU（给 init_boot 里 kernelsu.ko 的 LKM 模式用）
 USE_KPM="${USE_KPM:-0}"                       # KPatch-Next 独立 KPM（直接改 Image）
+APPLY_SUSFS="${APPLY_SUSFS:-0}"             # 1 = 集成 SUSFS（需要 scripts/finasu_compat 的源码级适配）
 APPLY_LZ4="${APPLY_LZ4:-1}"                   # lz4 1.10.0 + zstd 1.5.7
 APPLY_LZ4KD="${APPLY_LZ4KD:-0}"
 APPLY_BETTERNET="${APPLY_BETTERNET:-0}"
@@ -59,7 +64,6 @@ APPLY_DROIDSPACES="${APPLY_DROIDSPACES:-0}"   # 0 / standard / extend
 APPLY_ADIOS="${APPLY_ADIOS:-1}"
 APPLY_REKERNEL="${APPLY_REKERNEL:-0}"
 APPLY_BBG="${APPLY_BBG:-1}"
-APPLY_SUSFS=0                                 # FinaSU 内核树不兼容 susfs4ksu 的 KSU 侧补丁
 
 JOBS="${JOBS:-$(nproc --all 2>/dev/null || echo 4)}"
 WORKDIR="${WORKDIR:-$REPO_ROOT/work}"
@@ -292,6 +296,28 @@ if [ -n "$REJ_LIST" ]; then
     find "$WORKDIR/common" -name '*.rej' -exec cp --parents {} "$WORKDIR/rejects" \; 2>/dev/null || true
 fi
 
+if [ "$APPLY_SUSFS" = "1" ]; then
+    log "集成 SUSFS（内核侧补丁 + FinaSU 源码级适配）"
+    SUSFS_DIR="$WORKDIR/susfs4ksu"
+    if [ ! -d "$SUSFS_DIR/.git" ]; then
+        rm -rf "$SUSFS_DIR"
+        git clone --depth=1 -q "${SUSFS_REPO:-https://github.com/cctv18/susfs4oki.git}" \
+            -b "${SUSFS_BRANCH:-oki-android16-6.12}" "$SUSFS_DIR" \
+            || die "克隆 susfs4oks 失败"
+    fi
+    SUSFS_KERNEL_PATCH="$SUSFS_DIR/kernel_patches/50_add_susfs_in_gki-android16-6.12.patch"
+    [ -f "$SUSFS_KERNEL_PATCH" ] || die "找不到 SUSFS 内核补丁：$SUSFS_KERNEL_PATCH"
+    cp "$SUSFS_KERNEL_PATCH" "$WORKDIR/common/"
+    cp -r "$SUSFS_DIR/kernel_patches/fs/." "$WORKDIR/common/fs/"
+    cp -r "$SUSFS_DIR/kernel_patches/include/linux/." "$WORKDIR/common/include/linux/"
+    ( cd "$WORKDIR/common" && patch -p1 -F 3 --forward < 50_add_susfs_in_gki-android16-6.12.patch ) \
+        || die "SUSFS 内核补丁应用失败"
+    # KSU 侧 + FinaSU 重构后的内联修复（移植自 Wuwan94/AnyKernel3 的 finasu_compat）
+    KERNEL_ROOT="$WORKDIR" SUSFS4KSU="$SUSFS_DIR" \
+        bash "$REPO_ROOT/scripts/finasu_compat/apply.sh" KernelSU \
+        || die "FinaSU SUSFS 适配失败"
+fi
+
 if [ "$APPLY_BBG" = "1" ]; then
     log "集成 Baseband-guard（防格机 LSM）"
     # 注意：github.com/<repo>/raw/master/... 会 404（默认分支是 main），必须用 raw.githubusercontent
@@ -328,6 +354,26 @@ else
 cat >> "$DEFCONFIG" <<'EOF'
 # CONFIG_KSU is not set
 # CONFIG_KSU_SUSFS is not set
+EOF
+fi
+
+if [ "$APPLY_SUSFS" = "1" ]; then
+    cat >> "$DEFCONFIG" <<'EOF'
+CONFIG_KSU_SUSFS=y
+CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_PATH=y
+CONFIG_KSU_SUSFS_SUS_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_SUS_KSTAT=y
+CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+CONFIG_KSU_SUSFS_ENABLE_LOG=y
+CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+CONFIG_KSU_SUSFS_SUS_MAP=y
 EOF
 fi
 
@@ -431,7 +477,10 @@ if [ "$USE_CCACHE" = "1" ] && command -v ccache >/dev/null 2>&1; then
     export CCACHE_COMPRESS=1
     export CCACHE_MAXSIZE="${CCACHE_MAXSIZE:-5G}"
     mkdir -p "$CCACHE_DIR"
-    export CC="ccache $CLANG_DIR/clang" HOSTCC="ccache $CLANG_DIR/clang"
+    # 注意：HOSTCC 不能带 ccache！内核 rust/Makefile 会把 $(HOSTCC) 作为
+    #   -Clinker=$(HOSTCC) 传给 rustc，一旦是 "ccache /path/clang" 这种带空格的值，
+    #   rustc 会把它拆成两个参数，链接阶段报 "multiple input filenames provided"
+    export CC="ccache $CLANG_DIR/clang" HOSTCC="$CLANG_DIR/clang"
     info "ccache 已启用：$CCACHE_DIR（上限 $CCACHE_MAXSIZE）"
 else
     export CC="$CLANG_DIR/clang" HOSTCC="$CLANG_DIR/clang"
@@ -502,8 +551,17 @@ fi
 # ------------------------------------------------------------------ 打包
 log "打包 AnyKernel3"
 cd "$WORKDIR"
-if [ ! -d AnyKernel3/.git ]; then git clone --depth=1 -q https://github.com/cctv18/AnyKernel3; fi
-rm -rf AnyKernel3/.git
+rm -rf AnyKernel3
+if [ -d "$REPO_ROOT/ak3" ]; then
+    # 用仓库自维护的模板：内容固定、可离线构建
+    info "使用仓库内 ak3/ 模板（bash scripts/update-ak3.sh 可同步上游）"
+    cp -a "$REPO_ROOT/ak3" AnyKernel3
+else
+    info "仓库里没有 ak3/ 模板，回退到拉取上游"
+    git clone --depth=1 -q "${AK3_TEMPLATE_URL:-https://github.com/cctv18/AnyKernel3}" AnyKernel3 \
+        || die "拉取 AnyKernel3 模板失败"
+    rm -rf AnyKernel3/.git
+fi
 cp "$IMG" AnyKernel3/Image
 # AK3 模板里的 kernel.string 是上游作者的，改成 FinaSU 品牌 + 本次构建信息
 if [ -f AnyKernel3/anykernel.sh ]; then

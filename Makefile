@@ -1,10 +1,12 @@
 # ==============================================================================
-#  FinaSU / FinaSU 适配版 SM8850 内核构建器
+#  FinaSU 适配版 SM8850 内核构建器
 #    make check          只校验版本 / UAPI / 签名（不编译）
 #    make build          完整编译并出 AK3 包
 #    make ak3 IMAGE=...  用已有 Image 直接打包（不编译）
 #    make push           提交并推送当前改动
 #    make manager        从源码构建你自己的管理器 APK（需要 Android SDK/NDK）
+#    make test           跑单元测试（离线）
+#    make lint           语法自检（shell / python / yaml）
 # ==============================================================================
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -12,7 +14,7 @@ SHELL := /bin/bash
 IMAGE ?=
 MSG   ?= chore: update
 
-.PHONY: help check build ak3 push manager clean lint
+.PHONY: help check build ak3 push manager clean lint test
 
 help:
 	@grep -E '^#( |$$)' $(MAKEFILE_LIST) | sed 's/^# \{0,1\}//;s/^=*$$//'
@@ -37,6 +39,9 @@ push:
 
 clean:
 	rm -rf work dist .ak3work
+
+test:            # 单元测试（离线）
+	@python3 -m unittest discover -s tests -v
 
 lint:            # 语法自检（提交前跑一下）
 	@for f in scripts/*.sh; do bash -n "$$f" || exit 1; done
