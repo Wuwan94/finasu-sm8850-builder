@@ -59,6 +59,8 @@ Android 官方构建环境也明确设置该变量：
 
 安装器在读取或刷写 boot 前检查型号、代号和 Android 版本。在 Android 内刷入时还检查固件和正在运行的内核版本；Recovery 内核与系统内核可能不同，所以 Recovery 仅进行机型与系统版本检查。
 
+安装器入口在探测后显式导出 `BOOTMODE`，确保 `anykernel.sh` 子进程能区分 Android/Recovery。回归测试执行入口的实际探测块，再启动子 shell 调用机型门禁，覆盖 Android 两种进程探测、错误固件/内核拦截和 Recovery 模式传递。
+
 `pack-ak3.sh` 的手动打包入口同样执行门禁，并使用仓库内固定模板。它需要明确提供 `KERNEL_CONFIG`、`KERNEL_SYMVERS` 与 `KBUILD_GENDWARFKSYMS_STABLE=1`。
 
 ## 首次验证构建

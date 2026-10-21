@@ -27,6 +27,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -v
           for f in scripts/*.sh scripts/finasu_compat/*.sh ak3/*.sh; do bash -n "$f"; done
+          bash -n ak3/META-INF/com/google/android/update-binary
       - name: Free build space
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc
       - name: Build minimal FinaSU kernel and check stock module CRCs
