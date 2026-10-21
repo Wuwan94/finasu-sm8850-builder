@@ -77,6 +77,46 @@ def image(config=CONFIG, release=RELEASE, page_size=4096):
         b"IKCFG_ST" + gzip.compress(config, mtime=0) + b"IKCFG_ED")
 
 
+class PackableImageTests(unittest.TestCase):
+    def make_image(self, release=RELEASE, size=compat.MIN_PACKABLE_IMAGE_BYTES):
+        payload = bytearray(size)
+        struct.pack_into("<Q", payload, 24, 2)  # little-endian, 4 KiB pages
+        payload[56:60] = b"ARMd"
+        banner = b"Linux version " + release.encode("ascii") + b" (builder)\0"
+        payload[64:64 + len(banner)] = banner
+        return bytes(payload)
+
+    def test_accepts_matching_android_image_and_normalizes_gki_label(self):
+        info = compat.packable_image_info(
+            self.make_image(), "6.12.23-gki", "android16-5-gb2a876903b49-ab14541642-4k")
+        self.assertEqual(info["release"], RELEASE)
+        self.assertEqual(info["expectedRelease"], RELEASE)
+        self.assertEqual(info["fileBytes"], compat.MIN_PACKABLE_IMAGE_BYTES)
+
+    def test_rejects_text_wrong_release_short_image_and_unsafe_suffix(self):
+        cases = (
+            (b"not a kernel" * compat.MIN_PACKABLE_IMAGE_BYTES, "6.12.23", "safe"),
+            (self.make_image("6.12.23-wrong"), "6.12.23", "safe"),
+            (self.make_image()[:4096], "6.12.23", "safe"),
+            (self.make_image(), "6.12.23", "$(touch-pwned)"),
+        )
+        for data, version, suffix in cases:
+            with self.subTest(version=version, suffix=suffix):
+                with self.assertRaises(compat.CompatibilityError):
+                    compat.packable_image_info(data, version, suffix)
+
+    def test_rejects_bad_magic_page_size_and_truncated_header(self):
+        valid = self.make_image()
+        bad_magic = bytearray(valid)
+        bad_magic[56:60] = b"nope"
+        bad_page = bytearray(valid)
+        struct.pack_into("<Q", bad_page, 24, 0)
+        for data in (bytes(bad_magic), bytes(bad_page), valid[:63]):
+            with self.subTest(length=len(data)):
+                with self.assertRaises(compat.CompatibilityError):
+                    compat.packable_image_info(data, "6.12.23", "safe")
+
+
 class ModuleImportTests(unittest.TestCase):
     def test_traditional_and_extended_imports(self):
         expected = {"module_layout": 0x1234abcd, "_RNvCs_long_rust_symbol": 0xffffffff}

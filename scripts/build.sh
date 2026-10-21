@@ -53,6 +53,9 @@ case "$KERNEL_VERSION" in
     *) die "不支持的 KERNEL_VERSION=$KERNEL_VERSION（可选 6.12.23 / 6.12.38 / 6.12.58 / 6.12.69-gki）" ;;
 esac
 CUSTOM_SUFFIX="${CUSTOM_SUFFIX:-$DEFAULT_SUFFIX}"
+if [[ ! "$CUSTOM_SUFFIX" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$ ]]; then
+    die "CUSTOM_SUFFIX 只能是 1-64 位安全版本字符（字母、数字、点、下划线、加号、连字符）"
+fi
 
 USE_CCACHE="${USE_CCACHE:-0}"              # 1 = 启用 ccache（配合 CI 缓存能省 10 分钟）
 APPLY_KSU="${APPLY_KSU:-1}"   # 0 = 不内置 KSU（给 init_boot 里 kernelsu.ko 的 LKM 模式用）
@@ -574,6 +577,11 @@ fi
 
 # ------------------------------------------------------------------ 打包
 COMPAT_REPORT="$WORKDIR/compatibility.json"
+IMAGE_CHECK_REPORT="$WORKDIR/image-validation.json"
+python3 "$SCRIPT_DIR/kernel_compat.py" check-image \
+    --image "$IMG" --kernel-version "$KERNEL_VERSION" --suffix "$CUSTOM_SUFFIX" \
+    --output "$IMAGE_CHECK_REPORT" \
+    || die "内核镜像格式、长度或版本标识检查失败，不生成刷机包（见 $IMAGE_CHECK_REPORT）"
 if [ "$KERNEL_VERSION" = "6.12.23-gki" ]; then
     log "对照 RMX5200 原厂配置和厂商模块 CRC"
     COMPAT_REFERENCE="$REPO_ROOT/config/devices/rmx5200-16.0.9.401.json"
