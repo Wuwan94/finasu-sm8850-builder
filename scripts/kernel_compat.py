@@ -260,6 +260,59 @@ def embedded_config(image):
     return parse_config(data)
 
 
+MIN_PACKABLE_IMAGE_BYTES = 1024 * 1024
+MAX_PACKABLE_IMAGE_BYTES = 512 * 1024 * 1024
+
+
+def arm64_image_info(image):
+    """Check the fixed ARM64 Image header and return the fields safe to inspect.
+
+    The header's image_size is an effective in-memory size, not necessarily the
+    on-disk file length, so it must not be compared directly with len(image).
+    """
+    if len(image) < 64:
+        raise CompatibilityError("Image is shorter than the 64-byte ARM64 header")
+    if image[56:60] != b"ARMd":
+        raise CompatibilityError("Image has no ARM64 Linux Image header")
+    flags = struct.unpack_from("<Q", image, 24)[0]
+    if flags & 1:
+        raise CompatibilityError("Image is big-endian; Android targets require little-endian ARM64")
+    page_code = (flags >> 1) & 3
+    page_size = {1: 4096, 2: 16384, 3: 65536}.get(page_code)
+    if page_size is None:
+        raise CompatibilityError("Image header does not declare a supported ARM64 page size")
+    effective_size = struct.unpack_from("<Q", image, 16)[0]
+    if effective_size and effective_size < 64:
+        raise CompatibilityError("Image header declares an invalid effective image size")
+    releases = sorted(set(match.decode("ascii") for match in
+                          re.findall(rb"Linux version ([^\s\x00]+)", image)))
+    if len(releases) != 1:
+        raise CompatibilityError("Image must contain exactly one unambiguous Linux release string")
+    return {"fileBytes": len(image), "effectiveImageBytes": effective_size or None,
+            "pageSize": page_size, "release": releases[0]}
+
+
+def packable_image_info(image, kernel_version, suffix):
+    if len(image) < MIN_PACKABLE_IMAGE_BYTES:
+        raise CompatibilityError(
+            f"Image is too short for a complete Android kernel ({len(image)} bytes; "
+            f"minimum {MIN_PACKABLE_IMAGE_BYTES})")
+    if len(image) > MAX_PACKABLE_IMAGE_BYTES:
+        raise CompatibilityError("Image exceeds the 512 MiB packer safety limit")
+    base_version = kernel_version.removesuffix("-gki")
+    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", base_version):
+        raise CompatibilityError("Kernel version must be a supported numeric version")
+    if suffix and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,63}", suffix):
+        raise CompatibilityError("Kernel suffix must be 1-64 safe filename/version characters")
+    expected_release = base_version + ("-" + suffix if suffix else "")
+    info = arm64_image_info(image)
+    if info["release"] != expected_release:
+        raise CompatibilityError(
+            f"Image release {info['release']} does not match requested build {expected_release}")
+    info["expectedRelease"] = expected_release
+    return info
+
+
 def read_symvers(path):
     result = {}
     for number, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
@@ -394,6 +447,11 @@ def main(argv=None):
     for flag in ("image", "config", "symvers", "reference", "output"):
         check.add_argument("--" + flag, required=True)
     check.add_argument("--stable", type=int, choices=(0, 1), default=0)
+    pack_check = commands.add_parser("check-image", help="Reject incomplete or mismatched Android Image files")
+    pack_check.add_argument("--image", required=True)
+    pack_check.add_argument("--kernel-version", required=True)
+    pack_check.add_argument("--suffix", default="")
+    pack_check.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     if args.command == "snapshot":
         try:
@@ -403,9 +461,20 @@ def main(argv=None):
             report = {"schemaVersion": 1, "kind": "stock-kernel-compatibility-error",
                       "passed": False, "errors": [str(exc)]}
             status = 1
-    else:
+    elif args.command == "verify":
         report = verify(args)
         status = 0 if report["passed"] else 1
+    else:
+        try:
+            info = packable_image_info(Path(args.image).read_bytes(),
+                                       args.kernel_version, args.suffix)
+            report = {"schemaVersion": 1, "kind": "arm64-image-package-check",
+                      "passed": True, "checks": info, "errors": []}
+            status = 0
+        except (CompatibilityError, OSError, ValueError, UnicodeError) as exc:
+            report = {"schemaVersion": 1, "kind": "arm64-image-package-check",
+                      "passed": False, "checks": {}, "errors": [str(exc)]}
+            status = 1
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
@@ -414,6 +483,10 @@ def main(argv=None):
             print("ERROR: " + error, file=sys.stderr)
     elif args.command == "snapshot":
         print(f"Captured {report['moduleCount']} modules and {report['importCount']} import CRCs")
+    elif args.command == "check-image":
+        checks = report["checks"]
+        print(f"Packable ARM64 Image: {checks['fileBytes']} bytes; release {checks['release']}; "
+              f"page size {checks['pageSize']} bytes")
     else:
         coverage = report["checks"]["moduleImports"]
         print(f"Static checks passed: {coverage['comparedCount']}/{coverage['referenceCount']} imports compared; "

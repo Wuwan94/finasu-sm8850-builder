@@ -38,6 +38,9 @@ KSU_TYPENAME="${KSU_TYPENAME:-FinaSU}"
 KSU_VERSION="${KSU_VERSION:-32960}"
 KERNEL_VERSION="${KERNEL_VERSION:-6.12.23}"
 CUSTOM_SUFFIX="${CUSTOM_SUFFIX:-android16-5-ga8f88ad96df3-ab13929693-4k}"
+if [[ ! "$CUSTOM_SUFFIX" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$ ]]; then
+    die "CUSTOM_SUFFIX 只能是 1-64 位安全版本字符（字母、数字、点、下划线、加号、连字符）"
+fi
 WITH_LZ4KD="${WITH_LZ4KD:-0}"
 WITH_KPM="${WITH_KPM:-0}"
 OUT_DIR="${OUT_DIR:-$SCRIPT_DIR/../dist}"
@@ -46,6 +49,10 @@ WORK="${WORKDIR:-$SCRIPT_DIR/../.ak3work}"
 mkdir -p "$OUT_DIR" "$WORK"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 WORK="$(cd "$WORK" && pwd)"
+python3 "$SCRIPT_DIR/kernel_compat.py" check-image \
+    --image "$IMAGE" --kernel-version "$KERNEL_VERSION" --suffix "$CUSTOM_SUFFIX" \
+    --output "$WORK/image-validation.json" \
+    || die "内核镜像格式、长度或版本标识检查失败，不生成刷机包"
 if [ "$KERNEL_VERSION" = "6.12.23-gki" ]; then
     [ -n "${KERNEL_CONFIG:-}" ] && [ -n "${KERNEL_SYMVERS:-}" ] \
         || die "RMX5200 打包需要 KERNEL_CONFIG 和 KERNEL_SYMVERS，不能只凭 Image 文件名判断兼容"
