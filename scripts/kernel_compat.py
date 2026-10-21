@@ -303,6 +303,13 @@ def verify(args):
             imports[_symbol(name.encode("ascii"))] = int(crc, 16)
         if reference.get("importCount") != len(imports):
             raise CompatibilityError("Stock reference import count is inconsistent")
+        required_symbols = reference.get("requiredKernelSymbols", [])
+        if not isinstance(required_symbols, list) or not all(
+                isinstance(name, str) for name in required_symbols):
+            raise CompatibilityError("Stock reference requiredKernelSymbols must be a symbol-name list")
+        required_exports = {"module_layout"}
+        for name in required_symbols:
+            required_exports.add(_symbol(name.encode("ascii")))
         config = parse_config(config_bytes(args.config))
         stock_values = reference.get("configValues", {})
         if not isinstance(stock_values, dict):
@@ -345,6 +352,14 @@ def verify(args):
         if abi_differences:
             errors.append("ABI-critical kernel config differs from stock")
         exports = read_symvers(args.symvers)
+        missing_required = sorted(required_exports - set(exports))
+        checks["requiredKernelExports"] = {
+            "requiredCount": len(required_exports),
+            "presentCount": len(required_exports) - len(missing_required),
+            "missing": missing_required,
+        }
+        if missing_required:
+            errors.append("missing_required_kernel_export: " + ", ".join(missing_required))
         compared = sorted(set(imports) & set(exports))
         unresolved = sorted(set(imports) - set(exports))
         mismatches = {name: {"stock": f"0x{imports[name]:08x}",

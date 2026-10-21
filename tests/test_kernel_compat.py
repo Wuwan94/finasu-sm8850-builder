@@ -203,6 +203,30 @@ class CompatibilityTests(unittest.TestCase):
         self.symvers.write_text("0x1234abcd unrelated vmlinux EXPORT_SYMBOL\n")
         self.assert_failure("No stock module imports overlap")
 
+    def test_old_reference_still_requires_module_layout_with_nonzero_overlap(self):
+        self.symvers.write_text("0x99887766 vendor_dependency vmlinux EXPORT_SYMBOL\n")
+        report = self.assert_failure("missing_required_kernel_export: module_layout")
+        self.assertEqual(report["checks"]["moduleImports"]["comparedCount"], 1)
+        self.assertEqual(report["checks"]["requiredKernelExports"]["missing"], ["module_layout"])
+
+    def test_known_kernel_exports_cannot_be_reclassified_as_unresolved(self):
+        self.reference["requiredKernelSymbols"] = ["module_layout", "vendor_dependency"]
+        self.save_reference()
+        report = self.assert_failure("missing_required_kernel_export: vendor_dependency")
+        self.assertEqual(report["checks"]["requiredKernelExports"]["requiredCount"], 2)
+        self.assertEqual(report["checks"]["moduleImports"]["unresolved"], ["vendor_dependency"])
+        with self.symvers.open("a") as output:
+            output.write("0x99887766 vendor_dependency vmlinux EXPORT_SYMBOL\n")
+        self.assertTrue(compat.verify(self.args)["passed"])
+
+    def test_required_exports_must_be_valid_symbol_names(self):
+        for required in ("module_layout", [123], ["bad symbol"]):
+            with self.subTest(required=required):
+                self.reference["requiredKernelSymbols"] = required
+                self.save_reference()
+                report = compat.verify(self.args)
+                self.assertFalse(report["passed"])
+
     def test_image_must_be_arm64_and_4k_with_exact_stock_banner(self):
         self.image_path.write_bytes(b"not a kernel")
         self.assert_failure("ARM64 Linux Image header")

@@ -638,6 +638,7 @@ if [ "$APPLY_REKERNEL" = "1" ]; then ZIP_NAME="${ZIP_NAME}_rek"; fi
 if [ "$APPLY_BBG" = "1" ]; then ZIP_NAME="${ZIP_NAME}_bbg"; fi
 if [ "$APPLY_DROIDSPACES" != "0" ]; then ZIP_NAME="${ZIP_NAME}_dss"; fi
 if [ "$USE_KPM" = "1" ]; then ZIP_NAME="${ZIP_NAME}_kpm"; fi
+if [ "$KERNEL_VERSION" = "6.12.23-gki" ]; then ZIP_NAME="${ZIP_NAME}_RMX5200-stable-kmi"; fi
 ZIP_NAME="${ZIP_NAME}_$(date +%Y%m%d).zip"
 
 {

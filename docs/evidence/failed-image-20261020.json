@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "kind": "failed-image-module-crc-evidence",
+  "analyzedOn": "2026-10-20",
+  "artifact": {
+    "release": "finasu-6.12.23-gki-20261020-1212",
+    "buildUrl": "https://github.com/Wuwan94/finasu-sm8850-builder/actions/runs/39417616700",
+    "zipSha256": "e0fa9f6e3ea0593c0c3d1a3d02cf8b31fe32e52bf40ebcf135f3e15c7d0b26cb",
+    "imageSha256": "8ac79f797fffb5c7f05c5da76b0f445de50edf7ecdd0e88520cb302293b5e0b3",
+    "imageBytes": 39889408
+  },
+  "stockReference": {
+    "path": "config/devices/rmx5200-16.0.9.401.json",
+    "originalSnapshotSha256": "a60a7a68cc6552484dfb7f1a61b4067912a55a4dc30ff1c8a0834113784a6f17",
+    "originalSnapshotCommit": "5884a53f23a6ab613d85226d0175109e2734dcad",
+    "configSha256": "e239b50cb4c660493edfdc2ae4908b56cf5cae1e826f71f637da85e4aea3ecd0",
+    "modulesSha256": "5e0ada2966387a19348c8a15c321d489bdc74ed72f6c94c87d9319d0868e86de",
+    "moduleCount": 436,
+    "importCount": 4614
+  },
+  "tool": {
+    "repository": "https://github.com/marin-m/vmlinux-to-elf",
+    "version": "1.3.6",
+    "commit": "2d094bc9c220b6b50f8215cbc3c9e581210ce1a6",
+    "entryPoint": "vmlinux_to_elf.core.kallsyms.KallsymsFinder",
+    "note": "Optional release-database lookup was disabled after its date formatting failed; kallsyms parsing was unchanged."
+  },
+  "method": {
+    "virtualBase": "0xffffffc080000000",
+    "linuxBannerFileOffset": "0x13877d8",
+    "addressMappingVerifiedAgainstLinuxBanner": true,
+    "exportEntryFormat": "Three little-endian signed PREL32 fields, 12 bytes per kernel_symbol; parallel little-endian u32 CRC table.",
+    "exportTableAndCrcCountsAgree": true,
+    "exportNamesSortedAndUnique": true,
+    "formatSource": "https://github.com/cctv18/android_gki_kernel_common/blob/b2a876903b49/include/linux/export-internal.h",
+    "loaderSource": "https://github.com/cctv18/android_gki_kernel_common/blob/b2a876903b49/kernel/module/version.c"
+  },
+  "comparison": {
+    "regularExports": 6160,
+    "gplExports": 11888,
+    "totalExports": 18048,
+    "referenceImports": 4614,
+    "comparedImports": 2858,
+    "matchedImports": 947,
+    "mismatchedImports": 1911,
+    "importsNotCompared": 1756,
+    "modulesWithModuleLayoutMismatch": 436
+  },
+  "moduleLayout": {
+    "stockCrc": "0xe976b219",
+    "failedImageCrc": "0xde6485ed",
+    "normalModuleLoadWouldRejectAllCapturedModules": true
+  },
+  "conclusion": "Confirmed module ABI incompatibility and a boot-blocking defect in the failed Image.",
+  "limits": [
+    "Only the 436 captured vendor_dlkm modules were inspected; system_dlkm and failed-boot pstore were not available.",
+    "This does not prove that missing stable KABI mode is the sole cause of all mismatches or the only boot failure.",
+    "No successful device boot of a repaired Image is established by this evidence."
+  ]
+}
