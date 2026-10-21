@@ -1,6 +1,6 @@
 # FinaSU 适配版 SM8850 内核构建器
 
-> RMX5200 `16.0.9.401(CN01)` 已报告旧产物 `finasu-6.12.23-gki-20261020-1212` 无法开机，请勿重复刷入。当前修复启用 Android KABI 稳定模式，并增加原厂模块 CRC、Image 配置与安装机型检查。构建结果和限制见 [RMX5200 开机兼容性修复](docs/RMX5200-boot-repair.md)。尚未完成修复内核的真机开机验证。
+> RMX5200 `16.0.9.401(CN01)` 已报告旧产物 `finasu-6.12.23-gki-20261020-1212` 无法开机，请勿重复刷入。当前修复启用 Android KABI 稳定模式，并增加原厂模块 CRC、Image 配置与安装机型检查。构建结果和限制见 [RMX5200 开机兼容性修复](docs/RMX5200-boot-repair.md)。截至 2026-10-21，最新发布为 [finasu-6.12.23-gki-20261021-1400](https://github.com/Wuwan94/finasu-sm8850-builder/releases/tag/finasu-6.12.23-gki-20261021-1400)：发行说明报告 RMX5200 固件参考所要求的 2,858 个内核导出符号全部存在且 CRC 一致。此门禁不是完整 ABI 或真机启动认证，尚未完成修复内核的真机开机验证。
 
 给 OPPO / 一加 / 真我 SM8850（骁龙 8 Elite Gen5）机型造一个**能被 FinaSU 管理器直接接管**的 6.12 内核。
 
@@ -93,9 +93,9 @@ KERNEL_VERSION=6.12.58 bash scripts/build.sh
 MANAGER_APK=./FinaSU_v1.0.4_32960-release.apk bash scripts/build.sh
 ```
 
-产物：`dist/AnyKernel3_FinaSU_<内核版本>_<后缀>_<特性>_<日期>.zip`（+ `.sha256`），直接进 recovery / KernelFlasher 刷入。
+产物：`dist/AnyKernel3_FinaSU_<内核版本>_<后缀>_<特性>_<日期>.zip`（+ `.sha256`），核对机型/固件、门禁报告并备份原厂 boot 后，再按设备对应的 recovery / KernelFlasher 流程使用。构建或打包成功不保证开机。
 
-GitHub Actions 用法：推到自己的仓库 → Actions → **Build SM8850 Kernel (FinaSU / FinaSU)** → 选内核基线、填 `finasu_tag` / `finasu_version` → Run。想省事就把管理器 APK 直链填进 `manager_apk_url`，签名自动反推。
+GitHub Actions 用法：推到自己的仓库 → Actions → **Build SM8850 Kernel (FinaSU)** → 选内核基线、填 `finasu_tag` / `finasu_version` → Run。想省事就把管理器 APK 直链填进 `manager_apk_url`，签名自动反推。
 
 ---
 
@@ -123,11 +123,11 @@ bash scripts/build.sh --check
 
 ## 五、已知限制（重要，别踩）
 
-1. **SUSFS 默认关闭，且本脚本不做适配。**
-   FinaSU 的内核树已重构成 `kernel/feature/*` 结构，`susfs4ksu` 的 `10_enable_susfs_for_ksu.patch`（给老版 KernelSU 写的）打不上；它的 Kconfig 里也没有 `CONFIG_KSU_SUSFS` 系列项。强行 `patch -F3 || true` 会得到"日志里打了、实际没编进去"的假象。隐藏需求请用 FinaSU 自带的 Folk-Mount / NoMount / 内核级隐藏能力。
+1. **SUSFS 默认关闭，但独立构建入口已提供源码级适配。**
+   用法 B 可设置 `APPLY_SUSFS=1`（Actions 对应 `susfs_enable=true`），且必须同时 `APPLY_KSU=1` / `builtin_ksu=true`。`scripts/build.sh` 应用内核侧补丁后调用 `scripts/finasu_compat/apply.sh` 适配 FinaSU 重构后的源码，任一步失败即中止；不能直接套老 KernelSU 补丁后忽略错误。用法 A 的上游注入路径仍会关闭 SUSFS。适配代码存在不代表各基线构建或真机隐藏效果均已验证。
 2. **`CONFIG_HEADERS_INSTALL=n` 会让 KSU 的 preinit 走 `KSU_NO_PREINIT`。** 内置 KSU（不走 LKM）时无影响；要 LKM 模式请自行打开 header 安装。
 3. **签名不匹配并不是绝路。** FinaSU 有 `CONFIG_KSU_DYNAMIC_MANAGER=y`：非预置签名的管理器会被识别为候选，管理器里手动授权即可。这正是"换了自己签名的管理器"时的退路。
-4. **只保证 SM8850 系列。** MT6993 分支没在本仓库覆盖；同平台不同机型/固件的 `vermagic` 差异靠自己确认，刷前务必备份 boot。
+4. **覆盖范围为 SM8850 系列，不保证整机兼容。** MT6993 分支没在本仓库覆盖；同平台不同机型/固件的 `vermagic` 差异靠自己确认，刷前务必备份 boot。
 5. **没有真机验证。** 版本号、UAPI、签名三项都是对着源码和 APK 实测出来的（见 `docs/适配说明.md`），编译流程沿用上游配方；但"能不能开机"取决于你选的基线是否与机型匹配。第一次建议只开 LZ4 + BBG，跑通再逐项加。
 
 ---
@@ -139,6 +139,7 @@ bash scripts/build.sh --check
 | `kernel_version` | 源码基线 | 默认内核后缀 | 状态 |
 |---|---|---|---|
 | `6.12.23` | 一加 15（`oneplus/sm8850_v_16.0.0_oneplus_15`） | `android16-5-ga8f88ad96df3-…-4k` | ✅ 已验证出包 |
+| `6.12.23-gki` | AOSP GKI 固定提交 `b2a876903b49`，仅针对 RMX5200 `16.0.9.401(CN01)` 参考 | `android16-5-gb2a876903b49-ab14541642-4k` | 已发布 stable-KMI 实验包，2,858 个必需符号 CRC 门禁通过；未真机验证 |
 | `6.12.38` | 一加 Ace 6T（`sm8845`） | `android16-5-g8c67d4274c0a-…-4k` | CI 冒烟中 |
 | `6.12.58` | Pad 3 Pro（`sm8850`） | `android16-5-ga8f88ad96df3-…-4k` | CI 冒烟中 |
 | `6.12.69-gki` | 通用 GKI（`android_gki_kernel_common`） | `android16-5-ge7f2a9832757-…-4k` | CI 冒烟中 |
@@ -147,7 +148,7 @@ bash scripts/build.sh --check
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `builtin_ksu` | true | 把 FinaSU 编进内核。**刷过 LKM root（init_boot 里有 kernelsu.ko）的机器必须选 false**，否则卡开机 logo |
+| `builtin_ksu` | true | 把 FinaSU 编进内核。关闭则生成 NoKSU 内核；不保证与已有 LKM 兼容，不能仅靠关闭此项判断能否开机 |
 | `susfs_enable` | false | 集成 SUSFS（内核级隐藏）。需要 `builtin_ksu=true`，会调用 `scripts/finasu_compat/` 做 FinaSU 源码级适配 |
 | `baseband_guard` | true | Baseband-guard 防格机 LSM |
 | `adios` | true | ADIOS IO 调度器 |
@@ -157,7 +158,7 @@ bash scripts/build.sh --check
 ### 常用 make 目标
 
 ```bash
-make test        # 离线单测（apk_cert 解析 + apply_finasu 注入，共 8 个用例）
+make test        # 离线单测（APK 解析、适配注入、内核兼容性与打包/安装门禁等；数量以本次运行输出为准）
 make lint        # shell / python / yaml 语法自检
 make check       # 只校验 FinaSU 版本 / UAPI / 签名（不编译）
 make build       # 完整编译并出 AK3 包
@@ -180,7 +181,9 @@ KSU_TYPENAME=FinaSU KSU_VERSION=32960 KERNEL_VERSION=6.12.23 \
 WITH_LZ4KD=1 WITH_KPM=0 bash scripts/pack-ak3.sh /path/to/Image
 ```
 
-它会拉 `cctv18/AnyKernel3` 模板、塞 Image、写 `ak3.txt` 注释、出 `dist/*.zip` + `.sha256`；
+它使用仓库内固定的 `ak3/` 模板、放入 Image、写 `ak3.txt` 注释、输出 `dist/*.zip` + `.sha256`。同步模板是单独的 `scripts/update-ak3.sh` 操作，不是每次打包自动拉取上游。
+
+若 `KERNEL_VERSION=6.12.23-gki`，必须同时提供 `KERNEL_CONFIG`、`KERNEL_SYMVERS` 与 `KBUILD_GENDWARFKSYMS_STABLE=1`，通过 RMX5200 门禁后才生成包，不能只凭 Image 文件名认定兼容；
 系统里没有 `zip` 命令时自动用 python 兜底（Windows 也能跑）。
 
 > `scripts/build.sh` 在编译完成后本来就会自带这一步，`pack-ak3.sh` 是给"Image 已经有了、不想再等 20 分钟"的场景。
@@ -194,7 +197,7 @@ REMOTE_URL=git@github.com:me/xxx.git bash scripts/init-repo.sh   # 推到已有�
 ```
 
 没有 `gh` 命令时它会打印手动两条命令，不会瞎折腾。装好仓库后，Actions 里的
-**Build SM8850 Kernel (FinaSU / FinaSU)** 点一下就直接产出 AK3 包（Artifact 里下载）。
+**Build SM8850 Kernel (FinaSU)** 点一下就直接产出 AK3 包（Artifact 里下载）。
 
 ### 把适配推回上游 Wuwan94 仓库
 
