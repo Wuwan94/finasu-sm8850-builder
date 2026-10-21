@@ -10,7 +10,7 @@ on:
         default: '6.12.23'
         options:
           - '6.12.23'   # 一加 15 源码基线，OKI
-          - '6.12.23-gki'   # AOSP GKI common 6.12.23（跨品牌机型首选）
+          - '6.12.23-gki'   # RMX5200 16.0.9.401，必须通过原厂模块 CRC 检查
           - '6.12.38'   # 一加 Ace 6T 源码基线
           - '6.12.58'   # Pad 3 Pro 源码基线
           - '6.12.69-gki'
@@ -40,7 +40,7 @@ on:
         type: boolean
         default: false
       builtin_ksu:
-        description: '把 FinaSU 编译进内核（关闭则给 init_boot 里 kernelsu.ko 的 LKM 模式用；刷过 LKM root 的机器请选 false）'
+        description: '内置 FinaSU；关闭仅生成 NoKSU 内核，不保证兼容已有 LKM'
         required: true
         type: boolean
         default: true
@@ -121,13 +121,17 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@v4
 
+      - name: 检查构建脚本
+        run: |
+          python3 -m unittest discover -s tests -v
+          for f in scripts/*.sh scripts/finasu_compat/*.sh ak3/*.sh; do bash -n "$f"; done
+          bash -n ak3/META-INF/com/google/android/update-binary
+
       - name: 缓存 ccache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ccache
-          key: ccache-${{ inputs.kernel_version }}-${{ hashFiles('config/finasu.conf', 'scripts/build.sh') }}
-          restore-keys: |
-            ccache-${{ inputs.kernel_version }}-
+          key: ccache-stable-kabi-${{ inputs.kernel_version }}-${{ hashFiles('config/**', 'scripts/**') }}
 
       - name: 腾出磁盘空间
         run: |
@@ -195,12 +199,27 @@ jobs:
           path: build-full.log
           if-no-files-found: ignore
 
+      - name: 上传内核兼容性证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-compatibility-${{ github.run_id }}
+          include-hidden-files: true
+          path: |
+            work/compatibility.json
+            work/common/out/.config
+            work/common/out/vmlinux.symvers
+            work/.kernel-source-url
+          if-no-files-found: ignore
+
       - name: 发布 Release
         if: inputs.release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="finasu-${KERNEL_VERSION:-${{ inputs.kernel_version }}}-$(date +%Y%m%d-%H%M)"
+          TAG="finasu-${{ inputs.kernel_version }}-${{ inputs.builtin_ksu && 'builtin' || 'no-ksu' }}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           gh release create "$TAG" dist/*.zip dist/*.sha256 \
-            --title "FinaSU ${{ inputs.finasu_tag }} / kernel ${{ inputs.kernel_version }}" \
-            --notes "管理器版本号必须是 ${{ inputs.finasu_version }}（UAPI 见 config/finasu.conf）。刷入前请确认机型与内核基线匹配。"
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "${{ inputs.builtin_ksu && 'FinaSU' || 'NoKSU' }} / kernel ${{ inputs.kernel_version }}" \
+            --notes "实验构建，尚未验证真机开机。内置 FinaSU：${{ inputs.builtin_ksu }}。RMX5200 兼容性报告见包内 compatibility.json；符号 CRC 检查不等于完整启动验证。"

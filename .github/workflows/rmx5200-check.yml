@@ -1,0 +1,71 @@
+name: RMX5200 kernel compatibility
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'config/**'
+      - 'ak3/**'
+      - 'tests/**'
+      - '.github/workflows/rmx5200-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rmx5200-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kernel:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test scripts
+        run: |
+          python3 -m unittest discover -s tests -v
+          for f in scripts/*.sh scripts/finasu_compat/*.sh ak3/*.sh; do bash -n "$f"; done
+          bash -n ak3/META-INF/com/google/android/update-binary
+      - name: Free build space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc
+      - name: Build minimal FinaSU kernel and check stock module CRCs
+        env:
+          KERNEL_VERSION: '6.12.23-gki'
+          APPLY_KSU: '1'
+          APPLY_SUSFS: '0'
+          USE_KPM: '0'
+          APPLY_LZ4: '0'
+          APPLY_LZ4KD: '0'
+          APPLY_BETTERNET: '0'
+          APPLY_BBR: '0'
+          APPLY_DROIDSPACES: '0'
+          APPLY_ADIOS: '0'
+          APPLY_REKERNEL: '0'
+          APPLY_BBG: '0'
+          INSTALL_DEPS: '1'
+          USE_CCACHE: '0'
+        run: |
+          set -o pipefail
+          bash scripts/build.sh 2>&1 | tee build-full.log
+      - name: Upload diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rmx5200-kernel-evidence
+          include-hidden-files: true
+          path: |
+            build-full.log
+            work/compatibility.json
+            work/common/out/.config
+            work/common/out/vmlinux.symvers
+            work/.kernel-source-url
+          if-no-files-found: ignore
+      - name: Upload experimental kernel
+        uses: actions/upload-artifact@v7
+        with:
+          name: rmx5200-finasu-experimental
+          path: dist/*.zip
+          archive: false
+          if-no-files-found: error

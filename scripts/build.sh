@@ -22,10 +22,6 @@ warn() { printf '\033[1;33m[!]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
 
 # ------------------------------------------------------------------ 配置
-# SUSFS 依赖内置 KSU（KSU 侧补丁要改 FinaSU 内核侧源码）
-if [ "$APPLY_SUSFS" = "1" ] && [ "$APPLY_KSU" != "1" ]; then
-    die "APPLY_SUSFS=1 需要 APPLY_KSU=1（SUSFS 的 KSU 侧适配改的是 FinaSU 内核代码）"
-fi
 # shellcheck disable=SC1091
 . "$REPO_ROOT/config/finasu.conf"
 
@@ -42,8 +38,7 @@ case "$KERNEL_VERSION" in
     6.12.23-gki)
         # AOSP GKI common 6.12.23，**精确钉在真我 GT8 Pro 原厂内核所用的那个 commit**：
         #   原厂版本串 6.12.23-android16-5-gb2a876903b49-ab14541642-4k
-        #   → g + b2a876903b49 就是源码提交；该提交正好更新了 oplus 的 KMI 符号表
-        #     (gki/aarch64/symbols/oplus)，因此符号 CRC 与 system_dlkm 一致
+        #   → g + b2a876903b49 标识源码提交；仍须校验构建配置及原厂模块的符号 CRC。
         KERNEL_ZIP="https://github.com/cctv18/android_gki_kernel_common/archive/b2a876903b49.zip"
         DEFAULT_SUFFIX="android16-5-gb2a876903b49-ab14541642-4k" ;;
     6.12.38)
@@ -71,6 +66,11 @@ APPLY_DROIDSPACES="${APPLY_DROIDSPACES:-0}"   # 0 / standard / extend
 APPLY_ADIOS="${APPLY_ADIOS:-1}"
 APPLY_REKERNEL="${APPLY_REKERNEL:-0}"
 APPLY_BBG="${APPLY_BBG:-1}"
+
+# SUSFS 依赖内置 KSU（KSU 侧补丁要改 FinaSU 内核侧源码）
+if [ "$APPLY_SUSFS" = "1" ] && [ "$APPLY_KSU" != "1" ]; then
+    die "APPLY_SUSFS=1 需要 APPLY_KSU=1（SUSFS 的 KSU 侧适配改的是 FinaSU 内核代码）"
+fi
 
 JOBS="${JOBS:-$(nproc --all 2>/dev/null || echo 4)}"
 WORKDIR="${WORKDIR:-$REPO_ROOT/work}"
@@ -110,6 +110,7 @@ cat <<EOF
     内核后缀   : -$CUSTOM_SUFFIX
     管理器     : FinaSU $FINASU_TAG (versionCode $FINASU_MANAGER_VERSION, UAPI $FINASU_UAPI)
     管理器签名 : $FINASU_CERT_SIZE / ${FINASU_CERT_HASH:0:16}…
+    内置 FinaSU: $APPLY_KSU
     可选特性   : KPM=$USE_KPM LZ4=$APPLY_LZ4 LZ4KD=$APPLY_LZ4KD BBR=$APPLY_BBR ADIOS=$APPLY_ADIOS ReKernel=$APPLY_REKERNEL BBG=$APPLY_BBG DSS=$APPLY_DROIDSPACES NET=$APPLY_BETTERNET
     SUSFS      : 关闭（FinaSU 内核树已重构，susfs4ksu 的 KSU 侧联动补丁不兼容）
     并行度     : $JOBS    工作目录: $WORKDIR
@@ -172,6 +173,11 @@ fetch() { # fetch <url> <outfile>
     mv "$2.part" "$2"
 }
 
+SOURCE_MARKER="$WORKDIR/.kernel-source-url"
+if [ -d "$WORKDIR/common" ]; then
+    [ -f "$SOURCE_MARKER" ] && [ "$(cat "$SOURCE_MARKER")" = "$KERNEL_ZIP" ] \
+        || die "已有内核源码的基线无法确认或与本次选择不同，请使用新的 WORKDIR；保留现有源码不作修改"
+fi
 if [ ! -d "$WORKDIR/common" ]; then
     log "拉取内核源码 + 工具链（并行）"
     (
@@ -188,6 +194,7 @@ if [ ! -d "$WORKDIR/common" ]; then
             mkdir -p "$WORKDIR/common"
             mv "$WORKDIR/.kx"/* "$WORKDIR/common"/
         fi
+        printf '%s\n' "$KERNEL_ZIP" > "$SOURCE_MARKER"
         rm -rf "$WORKDIR/.kx" "$WORKDIR/common.zip"
     ) & P1=$!
     (
@@ -207,7 +214,11 @@ if [ ! -d "$WORKDIR/common" ]; then
         unzip -oq "$WORKDIR/bt.zip" -d "$WORKDIR"
         rm -f "$WORKDIR/bt.zip"
     ) & P4=$!
-    wait $P1 $P2 $P3 $P4
+    DOWNLOAD_FAILED=0
+    for download_pid in "$P1" "$P2" "$P3" "$P4"; do
+        wait "$download_pid" || DOWNLOAD_FAILED=1
+    done
+    [ "$DOWNLOAD_FAILED" = "0" ] || die "内核源码或工具链下载失败，请检查上方下载日志"
 else
     info "复用已存在的内核源码：$WORKDIR/common"
 fi
@@ -504,8 +515,11 @@ export KSU_EXPECTED_SIZE="$FINASU_CERT_SIZE"
 export KSU_EXPECTED_HASH="$FINASU_CERT_HASH"
 export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-finasu}"
 export KBUILD_BUILD_HOST="${KBUILD_BUILD_HOST:-builder}"
+# 与 Android 官方构建环境一致，启用 Android KABI 稳定规则。
+export KBUILD_GENDWARFKSYMS_STABLE=1
+info "KBUILD_GENDWARFKSYMS_STABLE=$KBUILD_GENDWARFKSYMS_STABLE"
 
-KCFLAGS=" -no-canonical-prefixes -O2 -pipe -Wno-error -fno-stack-protector -D__ANDROID_COMMON_KERNEL__"
+KCFLAGS=" -no-canonical-prefixes -O2 -pipe -Wno-error -D__ANDROID_COMMON_KERNEL__"
 # FinaSU 的源码头用的是 #include "uapi/app_profile.h"，依赖 Kbuild 里的
 # ccflags-y += -I$(KSU_KERNEL_DIR)/include 生效；在 symlink 挂载 + O= 组合下这条
 # 有时不作用于子目录对象（CI 上实测 core/init.o 找不到）。这里用 KCFLAGS 兜底，
@@ -524,9 +538,12 @@ info "bindgen : $(bindgen --version 2>/dev/null | head -1)"
 cd "$WORKDIR/common"
 BUILD_LOG="$WORKDIR/build.log"
 # shellcheck disable=SC2086
+make LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+    CC="$CC" HOSTCC="$HOSTCC" LD=ld.lld HOSTLD=ld.lld \
+    RUSTC=rustc OBJCOPY=llvm-objcopy KBUILD_GENDWARFKSYMS_STABLE=1 O=out gki_defconfig 2>&1 | tee "$BUILD_LOG"
 make -j"$JOBS" LLVM=1 ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
     CC="$CC" HOSTCC="$HOSTCC" LD=ld.lld HOSTLD=ld.lld \
-    RUSTC=rustc OBJCOPY=llvm-objcopy O=out gki_defconfig Image 2>&1 | tee "$BUILD_LOG"
+    RUSTC=rustc OBJCOPY=llvm-objcopy KBUILD_GENDWARFKSYMS_STABLE=1 O=out Image 2>&1 | tee -a "$BUILD_LOG"
 
 IMG="$WORKDIR/common/out/arch/arm64/boot/Image"
 [ -f "$IMG" ] || die "编译结束但没有产出 Image"
@@ -556,6 +573,21 @@ if [ "$USE_KPM" = "1" ]; then
 fi
 
 # ------------------------------------------------------------------ 打包
+COMPAT_REPORT="$WORKDIR/compatibility.json"
+if [ "$KERNEL_VERSION" = "6.12.23-gki" ]; then
+    log "对照 RMX5200 原厂配置和厂商模块 CRC"
+    COMPAT_REFERENCE="$REPO_ROOT/config/devices/rmx5200-16.0.9.401.json"
+    python3 "$SCRIPT_DIR/kernel_compat.py" verify \
+        --image "$IMG" --config "$WORKDIR/common/out/.config" \
+        --symvers "$WORKDIR/common/out/vmlinux.symvers" \
+        --reference "$COMPAT_REFERENCE" --output "$COMPAT_REPORT" \
+        --stable "$KBUILD_GENDWARFKSYMS_STABLE" \
+        || die "原厂兼容性检查失败，不生成刷机包（见 $COMPAT_REPORT）"
+else
+    # A report from another source tree must never qualify a new build.
+    rm -f "$COMPAT_REPORT"
+fi
+
 log "打包 AnyKernel3"
 cd "$WORKDIR"
 rm -rf AnyKernel3
@@ -570,16 +602,34 @@ else
     rm -rf AnyKernel3/.git
 fi
 cp "$IMG" AnyKernel3/Image
+if [ -f "$COMPAT_REPORT" ]; then
+    cp "$COMPAT_REPORT" AnyKernel3/compatibility.json
+    cat > AnyKernel3/device-compatibility.prop <<'EOF'
+model=RMX5200
+device=RE6030L1
+android=16
+firmware=RMX5200_16.0.9.401(CN01)
+release=6.12.23-android16-5-gb2a876903b49-ab14541642-4k
+EOF
+fi
 # AK3 模板里的 kernel.string 是上游作者的，改成 FinaSU 品牌 + 本次构建信息
 if [ -f AnyKernel3/anykernel.sh ]; then
-    sed -i "s|^kernel.string=.*|kernel.string=FinaSU $KERNEL_VERSION ($CUSTOM_SUFFIX) built by finasu-sm8850-builder|" \
+    ROOT_LABEL=FinaSU
+    if [ "$APPLY_KSU" != "1" ]; then ROOT_LABEL=NoKSU; fi
+    sed -i "s|^kernel.string=.*|kernel.string=$ROOT_LABEL $KERNEL_VERSION ($CUSTOM_SUFFIX) built by finasu-sm8850-builder|" \
         AnyKernel3/anykernel.sh
 fi
 cd AnyKernel3
 if [ "$APPLY_LZ4KD" = "1" ]; then curl -fsSLO "$RAW/zram.zip"; fi
 if [ "$USE_KPM" = "1" ]; then curl -fsSLO https://github.com/cctv18/KPatch-Next/releases/latest/download/kpn.zip; fi
 
-ZIP_NAME="AnyKernel3_FinaSU_${KERNEL_VERSION}_${CUSTOM_SUFFIX}"
+KSU_TYPENAME=FinaSU
+ROOT_DESCRIPTION="FinaSU $FINASU_TAG"
+if [ "$APPLY_KSU" != "1" ]; then
+    KSU_TYPENAME=NoKSU
+    ROOT_DESCRIPTION="No built-in KernelSU; existing LKM compatibility is not guaranteed"
+fi
+ZIP_NAME="AnyKernel3_${KSU_TYPENAME}_${KERNEL_VERSION}_${CUSTOM_SUFFIX}"
 if [ "$APPLY_LZ4" = "1" ]; then ZIP_NAME="${ZIP_NAME}_lz4-zstd"; fi
 if [ "$APPLY_LZ4KD" = "1" ]; then ZIP_NAME="${ZIP_NAME}_lz4kd"; fi
 if [ "$APPLY_BBR" != "0" ]; then ZIP_NAME="${ZIP_NAME}_bbr"; fi
@@ -588,14 +638,21 @@ if [ "$APPLY_REKERNEL" = "1" ]; then ZIP_NAME="${ZIP_NAME}_rek"; fi
 if [ "$APPLY_BBG" = "1" ]; then ZIP_NAME="${ZIP_NAME}_bbg"; fi
 if [ "$APPLY_DROIDSPACES" != "0" ]; then ZIP_NAME="${ZIP_NAME}_dss"; fi
 if [ "$USE_KPM" = "1" ]; then ZIP_NAME="${ZIP_NAME}_kpm"; fi
+if [ "$KERNEL_VERSION" = "6.12.23-gki" ]; then ZIP_NAME="${ZIP_NAME}_RMX5200-stable-kmi"; fi
 ZIP_NAME="${ZIP_NAME}_$(date +%Y%m%d).zip"
 
 {
     echo "Kernel      : $KERNEL_VERSION (-$CUSTOM_SUFFIX)"
-    echo "Root        : FinaSU $FINASU_TAG"
-    echo "KSU_VERSION : $FINASU_MANAGER_VERSION   (管理器版本号必须一致)"
-    echo "KSU UAPI    : $FINASU_UAPI"
-    echo "Manager cert: $FINASU_CERT_SIZE ${FINASU_CERT_HASH}"
+    echo "Root        : $ROOT_DESCRIPTION"
+    if [ "$APPLY_KSU" = "1" ]; then
+        echo "KSU_VERSION : $FINASU_MANAGER_VERSION"
+        echo "KSU UAPI    : $FINASU_UAPI"
+        echo "Manager cert: $FINASU_CERT_SIZE ${FINASU_CERT_HASH}"
+    fi
+    echo "KABI stable : $KBUILD_GENDWARFKSYMS_STABLE"
+    echo "Built-in KSU: $APPLY_KSU"
+    echo "Source      : $KERNEL_ZIP"
+    echo "Builder SHA : $(git -C "$REPO_ROOT" rev-parse HEAD)"
     echo "Built at    : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 } > ak3.txt
 zip -qr "$DIST_DIR/$ZIP_NAME" ./*
@@ -655,4 +712,8 @@ sha256sum "$ZIP_NAME" > "$ZIP_NAME.sha256"
 log "完成"
 info "刷机包 : $DIST_DIR/$ZIP_NAME"
 info "签名值 : $(cat "$ZIP_NAME.sha256")"
-info "管理器 : FinaSU 版本号必须是 $FINASU_MANAGER_VERSION（对应 $FINASU_TAG）"
+if [ "$APPLY_KSU" = "1" ]; then
+    info "管理器 : FinaSU 版本 $FINASU_MANAGER_VERSION（对应 $FINASU_TAG）"
+else
+    info "NoKSU 产物：没有内置 FinaSU，已有 LKM 需要单独核验兼容性"
+fi

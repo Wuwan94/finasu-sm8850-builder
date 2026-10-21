@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "kind": "repaired-image-static-evidence",
+  "verifiedOn": "2026-10-21",
+  "buildUrl": "https://github.com/Wuwan94/finasu-sm8850-builder/actions/runs/39428162797",
+  "branchCommit": "5884a53f23a6ab613d85226d0175109e2734dcad",
+  "compiledMergeCommit": "7f8e751a912cd7a2ddf39e713df6e133423f3ea6",
+  "artifactId": 12267722279,
+  "zipSha256": "fd8af0ed3bcb560c17ad44436b64dcae483395c21055285343ef25b59238255c",
+  "imageSha256": "b0dd26ad41690b90ac3f235ec40620ebfd99427956d05768ba70fb18984764b2",
+  "imageBytes": 40614400,
+  "release": "6.12.23-android16-5-gb2a876903b49-ab14541642-4k",
+  "pageSize": 4096,
+  "builtInFinaSU": true,
+  "finaSUTag": "v1.0.4",
+  "managerVersionCode": 32960,
+  "uapi": 6,
+  "stableKabiMode": 1,
+  "checks": {
+    "linuxCiTests": 36,
+    "laterLocalRegressionTests": 39,
+    "requiredKernelExportsPresent": 2858,
+    "referenceImports": 4614,
+    "comparedImports": 2858,
+    "matchedImports": 2858,
+    "crcMismatches": 0,
+    "unresolvedImports": 1756,
+    "moduleLayoutStockCrc": "0xe976b219",
+    "moduleLayoutImageCrc": "0xe976b219",
+    "embeddedConfigMatchesBuildConfig": true,
+    "abiConfigMatchesStock": true
+  },
+  "independentImageExtraction": {
+    "tool": "https://github.com/marin-m/vmlinux-to-elf",
+    "toolCommit": "2d094bc9c220b6b50f8215cbc3c9e581210ce1a6",
+    "verifiedLinuxBannerOffset": "0x1418658",
+    "virtualBase": "0xffffffc080000000",
+    "exports": 18048,
+    "method": "Read PREL32 export names and u32 CRCs from the downloaded Image; verified address mapping against linux_banner, export/CRC table counts, and sorted names. CRC comparison was independent of vmlinux.symvers."
+  },
+  "bootValidation": "not_performed",
+  "limits": [
+    "Unresolved imports may be supplied by other stock modules; this is not complete ABI coverage.",
+    "No system_dlkm modules or failed-boot pstore were available.",
+    "The repaired Image has not been boot-tested on a device. No automatic flashing or Release publication was performed."
+  ]
+}

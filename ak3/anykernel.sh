@@ -31,6 +31,12 @@ NO_MAGISK_CHECK=1
 # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
 . tools/ak3-core.sh
 
+# A device-specific build supplies this guard before any boot partition access.
+if [ -f "$AKHOME/device-compatibility.prop" ]; then
+    . "$AKHOME/device-compatibility.sh"
+    check_device_compatibility
+fi
+
 ui_print "内核构建者: Coolapk@cctv18"
 
 # Resolving occasional file system I/O latency issues which may cause binary execution exceptions
