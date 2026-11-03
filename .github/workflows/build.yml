@@ -18,12 +18,12 @@ on:
         description: 'FinaSU 源码 tag（要与管理器版本配套）'
         required: true
         type: string
-        default: 'v1.0.4'
+        default: 'v1.4.3'
       finasu_version:
         description: '管理器 versionCode（必须等于 30000 + 该 tag 的提交数）'
         required: true
         type: string
-        default: '32960'
+        default: '33156'
       manager_apk_url:
         description: '可选：管理器 APK 直链，填了就从 APK 实测签名并核对版本号'
         required: false

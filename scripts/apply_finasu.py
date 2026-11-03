@@ -176,7 +176,7 @@ def patch_builder(f, cfg):
         f"FINASU_TAG=${{FINASU_TAG:-{cfg.tag}}}\n"
         f"FINASU_MANAGER_VERSION=${{FINASU_MANAGER_VERSION:-{cfg.version}}}\n"
         f"FINASU_UAPI=${{FINASU_UAPI:-{cfg.uapi}}}\n"
-        "# 管理器签名证书的 (DER 长度, SHA-256)，取自 FinaSU_v1.0.4_32960-release.apk\n"
+        "# 管理器签名证书的 (DER 长度, SHA-256)，取自 FinaSU_v1.4.3_33156-release.apk\n"
         f"FINASU_CERT_SIZE=${{FINASU_CERT_SIZE:-{cfg.cert_size}}}\n"
         f"FINASU_CERT_HASH=${{FINASU_CERT_HASH:-{cfg.cert_hash}}}\n"
     )
@@ -191,11 +191,11 @@ def patch_builder(f, cfg):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("repo", help="上游仓库根目录")
-    ap.add_argument("--tag", default="v1.0.4")
-    ap.add_argument("--version", default="32960")
+    ap.add_argument("--tag", default="v1.4.3")
+    ap.add_argument("--version", default="33156")
     ap.add_argument("--uapi", default="6")
     ap.add_argument("--cert-size", default="0x103")
-    ap.add_argument("--cert-hash", default="f7cecef261a422eb70f7cb63272ec28c28c2b29856e51ba5ad229935ddc1d833")
+    ap.add_argument("--cert-hash", default="70f83b4a084ee6444adfd0ed593881668c1fe8c5f6b8e96d5061c76786a41da1")
     cfg = ap.parse_args()
 
     root = pathlib.Path(cfg.repo).resolve()
